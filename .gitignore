@@ -7,9 +7,10 @@ __pycache__/
 # Secrets
 .env
 
-# Browser state (chatgpt skill)
+# Browser state/profiles
 **/browser_state/
 **/browser_profile/
+**/browser/
 
 # Data files (runtime-generated, large)
 *.db
