@@ -1,0 +1,30 @@
+[
+  {
+    "version": 1,
+    "created_at": 1769978801.4609747,
+    "source": "claude",
+    "notes": "初版草稿",
+    "chars": 93
+  },
+  {
+    "version": 2,
+    "created_at": 1769978850.0213056,
+    "source": "claude+gemini",
+    "notes": "应用Gemini建议：完善输出格式、添加硬约束、增加避免事项",
+    "chars": 322
+  },
+  {
+    "version": 3,
+    "created_at": 1769978918.0710394,
+    "source": "claude+gemini",
+    "notes": "v3: 明确输入格式、细化估值参考、增加逻辑自洽要求",
+    "chars": 707
+  },
+  {
+    "version": 4,
+    "created_at": 1769978992.5742044,
+    "source": "claude+gemini",
+    "notes": "v4: 统一同比格式、灵活估值参考、优化理由要求",
+    "chars": 838
+  }
+]

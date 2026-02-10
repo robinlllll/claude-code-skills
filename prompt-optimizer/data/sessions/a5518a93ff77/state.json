@@ -1,0 +1,10 @@
+{
+  "schema_version": 1,
+  "session_id": "a5518a93ff77",
+  "goal": "Conference transcript analysis prompt — extract incremental updates vs last earnings call, strategic signals, investment-relevant info under CFA 9-section framework",
+  "created_at": 1770680751.8250234,
+  "updated_at": 1770681613.9369588,
+  "status": "COMPLETED",
+  "active_version": 4,
+  "active_round": 5
+}

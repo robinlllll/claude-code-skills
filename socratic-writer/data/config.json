@@ -1,0 +1,13 @@
+{
+  "gemini_api_key": "AIzaSyBWQCfyhbTYjy8lEhGE12Kda3glDmcOb9U",
+  "openai_api_key": "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",
+  "obsidian_path": "C:\\Users\\thisi\\Documents\\Obsidian Vault\\写作\\思考性文章",
+  "chatgpt_model": "gpt-5.2-chat-latest",
+  "default_question_depth": 3,
+  "auto_research": true,
+  "include_research_in_export": true,
+  "include_challenges_in_export": true,
+  "created_at": "2026-02-01T22:50:48.701721",
+  "updated_at": "2026-02-09T09:04:39.987309",
+  "gemini_model": "gemini-3-pro-preview"
+}

@@ -1,0 +1,74 @@
+# Research Preferences Configuration (v1.0)
+# All research skills reference this file. Modify here → all skills auto-update.
+# See: Documents/Obsidian Vault/Projects/research-workflow-upgrade/PLAN.md
+
+version: "1.0"
+
+profile:
+  name: "Robin"
+  role: "Long-biased hedge fund manager"
+  focus: "Fundamental research, bottom-up stock picking"
+  base_currency: "USD"
+  benchmark: "S&P 500"
+
+investment_style:
+  approach: "Long-biased, fundamental"
+  holding_period: "6-18 months"
+  position_limits:
+    max_single: 0.10
+    max_top5: 0.40
+  conviction_levels: ["High", "Medium", "Low", "Watchlist"]
+
+writing_style:
+  language: "中文"
+  code_language: "English"
+  principles:
+    - "数据驱动，用具体数字替代形容词"
+    - "核心观点前置（TLDR first）"
+    - "大量使用表格对比"
+    - "标注所有来源"
+  report_structure: "TLDR → 公司概况 → 投资逻辑 → 风险 → 估值 → 来源"
+
+source_attribution:
+  enabled: true
+  tags:
+    YF: "Yahoo Finance (yfinance) 市场数据"
+    Vault: "Obsidian 知识库引用"
+    NLM: "NotebookLM 查询结果"
+    13F: "13F 机构持仓数据"
+    SC: "供应链数据库"
+    Web: "网络搜索"
+    Thesis: "现有 thesis 文件"
+    Transcript: "财报电话会议纪要"
+    ChatGPT: "ChatGPT 历史对话"
+    Model: "模型通用知识（无特定来源）"
+    KB: "知识库入库资料（研报/纪要等）"
+  rules:
+    - "每条事实性陈述必须携带来源标签"
+    - "定量数据不允许使用 [Model]"
+    - "多来源交叉验证标注所有来源"
+
+analysis_framework:
+  config_path: "shared/analysis_framework.yaml"
+  sections: 9
+  coverage_tool: "shared/framework_coverage.py"
+
+reflection:
+  enabled: true
+  config_path: "shared/reflection_questions.yaml"
+  auto_append: true
+
+# Override policy (GPT review feedback):
+# global_only = all skills must follow, no override
+# allow_skill_override = skills can define local variants
+override_policy:
+  source_attribution: "global_only"
+  language: "global_only"
+  writing_style: "allow_skill_override"
+  report_structure: "allow_skill_override"
+
+obsidian:
+  vault_path: "~/Documents/Obsidian Vault/"
+  date_format: "YYYY-MM-DD"
+  frontmatter_required: true
+  wikilinks: true

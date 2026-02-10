@@ -1,0 +1,15 @@
+{
+  "round": 1,
+  "created_at": 1770680901.6764848,
+  "prompt_version": 1,
+  "gemini_model": "gemini-2.5-flash",
+  "gemini_review": "",
+  "user_feedback": "",
+  "test_report": "",
+  "notes": "",
+  "gpt_model": "",
+  "gpt_review": "",
+  "synthesis": "",
+  "gemini_time": 30,
+  "gpt_time": 3.24249267578125e-05
+}

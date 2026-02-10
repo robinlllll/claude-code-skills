@@ -1,0 +1,16 @@
+[
+  {
+    "version": 1,
+    "created_at": 1769995625.9520054,
+    "source": "user",
+    "notes": "现有prompt版本",
+    "chars": 1938
+  },
+  {
+    "version": 2,
+    "created_at": 1770003645.596615,
+    "source": "user+gemini",
+    "notes": "应用建议1和2：添加禁止遗漏数据点约束、修正动作示例为标准四选项",
+    "chars": 1993
+  }
+]

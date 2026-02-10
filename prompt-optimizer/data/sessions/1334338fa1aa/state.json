@@ -1,0 +1,10 @@
+{
+  "schema_version": 1,
+  "session_id": "1334338fa1aa",
+  "goal": "分析上市公司季度财报，提取关键指标并给出投资建议",
+  "created_at": 1769978762.3022048,
+  "updated_at": 1769978992.575669,
+  "status": "HAS_VERSION",
+  "active_version": 4,
+  "active_round": 3
+}

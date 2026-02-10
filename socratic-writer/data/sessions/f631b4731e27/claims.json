@@ -1,0 +1,63 @@
+{
+  "claims": [
+    {
+      "id": "C1",
+      "text": "市场叙事是投资者集体认知的故事框架，影响资金流向和定价",
+      "status": "supported",
+      "source": "user",
+      "created_at": "2026-02-01T23:33:36.094384",
+      "evidence": [
+        {
+          "type": "support",
+          "source_id": "Shiller2017",
+          "text": "Shiller在2017年AEA主席演讲中论证叙事如何解释经济现象如衰退和泡沫",
+          "added_at": "2026-02-01T23:34:36.825650"
+        }
+      ],
+      "notes": []
+    },
+    {
+      "id": "C2",
+      "text": "叙事具有自我强化特性：越多人相信，越容易影响实际结果",
+      "status": "supported",
+      "source": "user",
+      "created_at": "2026-02-01T23:33:40.373316",
+      "evidence": [
+        {
+          "type": "support",
+          "source_id": "Roach2025",
+          "text": "Stephen Roach 2025年分析：AI叙事推动Mag7资本支出2024年达2180亿美元，较2022-23均值增45%",
+          "added_at": "2026-02-01T23:34:40.903868"
+        }
+      ],
+      "notes": []
+    },
+    {
+      "id": "C3",
+      "text": "识别叙事所处阶段（早期/中期/后期）是获取alpha的关键",
+      "status": "unverified",
+      "source": "user",
+      "created_at": "2026-02-01T23:33:44.480770",
+      "evidence": [],
+      "notes": []
+    },
+    {
+      "id": "C4",
+      "text": "叙事最终要回归基本面检验，脱节越大，回调风险越高",
+      "status": "supported",
+      "source": "user",
+      "created_at": "2026-02-01T23:33:48.396236",
+      "evidence": [
+        {
+          "type": "support",
+          "source_id": "Roach2025",
+          "text": "Mag7占标普500市值34%，远超2000年互联网公司的6%，集中风险更高",
+          "added_at": "2026-02-01T23:34:44.792072"
+        }
+      ],
+      "notes": []
+    }
+  ],
+  "next_id": 5,
+  "updated_at": "2026-02-01T23:34:44.792121"
+}

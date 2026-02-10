@@ -1,0 +1,369 @@
+# Entity Dictionary — Coverage Universe
+# Maps aliases → canonical company identity
+# Used by: ticker_detector.py, entity_resolver.py
+# Maintained manually. Add new companies as coverage expands.
+#
+# Format:
+#   TICKER:
+#     canonical_name: Full legal name
+#     tickers: [primary, secondary ADR/local]
+#     aliases: [all known aliases, abbreviations, Chinese names, products]
+#     sector: GICS sector
+#     key_products: [major products/brands that may be mentioned]
+
+# ── Semiconductors ──────────────────────────────────────────
+
+NVDA:
+  canonical_name: "NVIDIA Corporation"
+  tickers: [NVDA]
+  aliases: ["NVIDIA", "Nvidia", "nvidia", "Jensen Huang"]
+  sector: Semiconductors
+  key_products: ["H100", "H200", "B200", "B300", "Grace Hopper", "CUDA", "DGX", "GeForce", "Blackwell", "Hopper"]
+
+TSM:
+  canonical_name: "Taiwan Semiconductor Manufacturing Company"
+  tickers: [TSM, "2330.TW"]
+  aliases: ["TSMC", "台积电", "Taiwan Semi", "Taiwan Semiconductor"]
+  sector: Semiconductors
+  key_products: ["N3", "N2", "CoWoS", "InFO"]
+
+AVGO:
+  canonical_name: "Broadcom Inc."
+  tickers: [AVGO]
+  aliases: ["Broadcom", "博通"]
+  sector: Semiconductors
+  key_products: ["VMware", "Tomahawk", "Jericho"]
+
+AMD:
+  canonical_name: "Advanced Micro Devices Inc."
+  tickers: [AMD]
+  aliases: ["AMD", "Advanced Micro Devices"]
+  sector: Semiconductors
+  key_products: ["EPYC", "Ryzen", "Radeon", "MI300"]
+
+INTC:
+  canonical_name: "Intel Corporation"
+  tickers: [INTC]
+  aliases: ["Intel", "英特尔"]
+  sector: Semiconductors
+  key_products: ["Xeon", "Core Ultra", "Gaudi", "Meteor Lake", "Arrow Lake"]
+
+ASML:
+  canonical_name: "ASML Holding N.V."
+  tickers: [ASML]
+  aliases: ["ASML", "阿斯麦"]
+  sector: Semiconductors
+  key_products: ["EUV", "High-NA EUV", "TWINSCAN"]
+
+QCOM:
+  canonical_name: "Qualcomm Incorporated"
+  tickers: [QCOM]
+  aliases: ["Qualcomm", "高通"]
+  sector: Semiconductors
+  key_products: ["Snapdragon", "Adreno", "QCT"]
+
+SITM:
+  canonical_name: "SiTime Corporation"
+  tickers: [SITM]
+  aliases: ["SiTime", "SITM"]
+  sector: Semiconductors
+  key_products: ["MEMS", "MEMS oscillators", "MEMS clocking"]
+
+SNPS:
+  canonical_name: "Synopsys Inc."
+  tickers: [SNPS]
+  aliases: ["Synopsys", "新思科技"]
+  sector: Semiconductors
+  key_products: ["EDA", "Design IP", "Fusion Compiler"]
+
+MU:
+  canonical_name: "Micron Technology Inc."
+  tickers: [MU]
+  aliases: ["Micron", "美光"]
+  sector: Semiconductors
+  key_products: ["HBM", "HBM3E", "DRAM", "NAND"]
+
+# ── Big Tech / Cloud ────────────────────────────────────────
+
+AAPL:
+  canonical_name: "Apple Inc."
+  tickers: [AAPL]
+  aliases: ["Apple", "苹果", "Tim Cook"]
+  sector: Technology
+  key_products: ["iPhone", "Mac", "iPad", "Apple Intelligence", "Vision Pro", "Apple Silicon", "M4"]
+
+MSFT:
+  canonical_name: "Microsoft Corporation"
+  tickers: [MSFT]
+  aliases: ["Microsoft", "微软", "Satya Nadella"]
+  sector: Technology
+  key_products: ["Azure", "Copilot", "Office 365", "Microsoft Teams", "GitHub"]
+
+GOOGL:
+  canonical_name: "Alphabet Inc."
+  tickers: [GOOGL, GOOG]
+  aliases: ["Google", "Alphabet", "谷歌", "Sundar Pichai"]
+  sector: Technology
+  key_products: ["Google Cloud", "Gemini", "YouTube", "Waymo", "Android"]
+
+AMZN:
+  canonical_name: "Amazon.com Inc."
+  tickers: [AMZN]
+  aliases: ["Amazon", "亚马逊", "Andy Jassy", "AWS"]
+  sector: Technology
+  key_products: ["AWS", "Amazon Prime", "Alexa", "Trainium", "Graviton"]
+
+META:
+  canonical_name: "Meta Platforms Inc."
+  tickers: [META]
+  aliases: ["Meta", "Facebook", "Instagram", "WhatsApp", "Mark Zuckerberg", "Zuckerberg"]
+  sector: Technology
+  key_products: ["Llama", "Meta Quest", "Ray-Ban Meta"]
+
+# ── Data & Analytics ──────────────────────────────────────
+
+EFX:
+  canonical_name: "Equifax Inc."
+  tickers: [EFX]
+  aliases: ["Equifax"]
+  sector: Industrials
+  key_products: ["Workforce Solutions", "USIS", "International"]
+
+# ── Gaming ────────────────────────────────────────────────
+
+"7974":
+  canonical_name: "Nintendo Co., Ltd."
+  tickers: ["7974.T", "7974"]
+  aliases: ["Nintendo", "任天堂"]
+  sector: Communication Services
+  key_products: ["Switch", "Switch 2", "Mario", "Zelda", "Pokemon"]
+
+# ── Ad Tech / Software ────────────────────────────────────
+
+APP:
+  canonical_name: "AppLovin Corporation"
+  tickers: [APP]
+  aliases: ["AppLovin", "Applovin"]
+  sector: Technology
+  key_products: ["AXON", "MAX", "AppDiscovery", "Wurl", "CloudX"]
+
+HOOD:
+  canonical_name: "Robinhood Markets Inc."
+  tickers: [HOOD]
+  aliases: ["Robinhood"]
+  sector: Financials
+  key_products: ["Robinhood Gold", "Robinhood Legend"]
+
+GRND:
+  canonical_name: "Grindr Inc."
+  tickers: [GRND]
+  aliases: ["Grindr"]
+  sector: Communication Services
+  key_products: []
+
+# ── Consumer / Tobacco ──────────────────────────────────────
+
+PM:
+  canonical_name: "Philip Morris International Inc."
+  tickers: [PM]
+  aliases: ["Philip Morris", "PMI", "菲利普莫里斯"]
+  sector: Consumer Staples
+  key_products: ["IQOS", "ZYN", "ILUMA", "TEREA", "Marlboro"]
+
+MO:
+  canonical_name: "Altria Group Inc."
+  tickers: [MO]
+  aliases: ["Altria", "奥驰亚"]
+  sector: Consumer Staples
+  key_products: ["NJOY", "on!"]
+
+BTI:
+  canonical_name: "British American Tobacco p.l.c."
+  tickers: [BTI, "BATS.L"]
+  aliases: ["BAT", "British American Tobacco", "英美烟草"]
+  sector: Consumer Staples
+  key_products: ["Vuse", "Velo", "glo"]
+
+SWMA:
+  canonical_name: "Swedish Match AB"
+  tickers: [SWMA]
+  aliases: ["Swedish Match"]
+  sector: Consumer Staples
+  key_products: ["ZYN", "General Snus"]
+
+# ── Financials / Insurance ──────────────────────────────────
+
+BRK.B:
+  canonical_name: "Berkshire Hathaway Inc."
+  tickers: ["BRK.B", "BRK.A"]
+  aliases: ["Berkshire", "Berkshire Hathaway", "Buffett", "Warren Buffett", "伯克希尔"]
+  sector: Financials
+  key_products: ["GEICO", "BNSF", "Berkshire Hathaway Energy"]
+
+JPM:
+  canonical_name: "JPMorgan Chase & Co."
+  tickers: [JPM]
+  aliases: ["JPMorgan", "JP Morgan", "JPMorgan Chase", "Jamie Dimon", "摩根大通"]
+  sector: Financials
+  key_products: []
+
+GS:
+  canonical_name: "The Goldman Sachs Group Inc."
+  tickers: [GS]
+  aliases: ["Goldman Sachs", "Goldman", "高盛"]
+  sector: Financials
+  key_products: []
+
+# ── Energy ──────────────────────────────────────────────────
+
+XOM:
+  canonical_name: "Exxon Mobil Corporation"
+  tickers: [XOM]
+  aliases: ["ExxonMobil", "Exxon", "Exxon Mobil", "埃克森美孚"]
+  sector: Energy
+  key_products: ["Permian", "Guyana"]
+
+CVX:
+  canonical_name: "Chevron Corporation"
+  tickers: [CVX]
+  aliases: ["Chevron", "雪佛龙"]
+  sector: Energy
+  key_products: ["Tengiz", "Chevron LNG"]
+
+# ── Healthcare / Pharma ────────────────────────────────────
+
+LLY:
+  canonical_name: "Eli Lilly and Company"
+  tickers: [LLY]
+  aliases: ["Eli Lilly", "Lilly", "礼来"]
+  sector: Healthcare
+  key_products: ["Mounjaro", "Zepbound", "tirzepatide"]
+
+NVO:
+  canonical_name: "Novo Nordisk A/S"
+  tickers: [NVO, "NOVO-B.CO"]
+  aliases: ["Novo Nordisk", "Novo", "诺和诺德"]
+  sector: Healthcare
+  key_products: ["Ozempic", "Wegovy", "semaglutide"]
+
+# ── China / HK ──────────────────────────────────────────────
+
+BABA:
+  canonical_name: "Alibaba Group Holding Limited"
+  tickers: [BABA, "9988.HK"]
+  aliases: ["Alibaba", "阿里巴巴", "阿里", "Ali"]
+  sector: Technology
+  key_products: ["Taobao", "Tmall", "Aliyun", "阿里云", "Qwen", "通义千问"]
+
+TCEHY:
+  canonical_name: "Tencent Holdings Limited"
+  tickers: [TCEHY, "0700.HK"]
+  aliases: ["Tencent", "腾讯"]
+  sector: Technology
+  key_products: ["WeChat", "微信", "QQ", "王者荣耀", "Tencent Cloud"]
+
+PDD:
+  canonical_name: "PDD Holdings Inc."
+  tickers: [PDD]
+  aliases: ["Pinduoduo", "拼多多", "PDD", "Temu"]
+  sector: Technology
+  key_products: ["Temu", "Pinduoduo"]
+
+BIDU:
+  canonical_name: "Baidu Inc."
+  tickers: [BIDU, "9888.HK"]
+  aliases: ["Baidu", "百度"]
+  sector: Technology
+  key_products: ["Ernie Bot", "文心一言", "Apollo Go"]
+
+JD:
+  canonical_name: "JD.com Inc."
+  tickers: [JD, "9618.HK"]
+  aliases: ["JD.com", "JD", "京东"]
+  sector: Technology
+  key_products: ["JD Logistics", "京东物流"]
+
+# ── Industrials / Defense ───────────────────────────────────
+
+LMT:
+  canonical_name: "Lockheed Martin Corporation"
+  tickers: [LMT]
+  aliases: ["Lockheed Martin", "Lockheed", "洛克希德马丁"]
+  sector: Industrials
+  key_products: ["F-35", "HIMARS", "Sikorsky"]
+
+RTX:
+  canonical_name: "RTX Corporation"
+  tickers: [RTX]
+  aliases: ["Raytheon", "RTX", "Pratt & Whitney", "Collins Aerospace"]
+  sector: Industrials
+  key_products: ["Patriot", "Stinger", "GTF"]
+
+CAT:
+  canonical_name: "Caterpillar Inc."
+  tickers: [CAT]
+  aliases: ["Caterpillar", "卡特彼勒"]
+  sector: Industrials
+  key_products: []
+
+AOS:
+  canonical_name: "A.O. Smith Corporation"
+  tickers: [AOS]
+  aliases: ["A.O. Smith", "A. O. Smith", "AO Smith", "史密斯"]
+  sector: Industrials
+  key_products: ["Lochinvar", "State Water Heaters"]
+
+# ── Retail / Consumer Discretionary ─────────────────────────
+
+COST:
+  canonical_name: "Costco Wholesale Corporation"
+  tickers: [COST]
+  aliases: ["Costco", "开市客"]
+  sector: Consumer Discretionary
+  key_products: ["Kirkland"]
+
+WMT:
+  canonical_name: "Walmart Inc."
+  tickers: [WMT]
+  aliases: ["Walmart", "沃尔玛"]
+  sector: Consumer Discretionary
+  key_products: ["Sam's Club", "Walmart+"]
+
+TSLA:
+  canonical_name: "Tesla Inc."
+  tickers: [TSLA]
+  aliases: ["Tesla", "特斯拉", "Elon Musk"]
+  sector: Consumer Discretionary
+  key_products: ["Model 3", "Model Y", "Cybertruck", "Megapack", "FSD", "Optimus"]
+
+# ── Telecom / Media ─────────────────────────────────────────
+
+NFLX:
+  canonical_name: "Netflix Inc."
+  tickers: [NFLX]
+  aliases: ["Netflix", "奈飞"]
+  sector: Communication Services
+  key_products: []
+
+DIS:
+  canonical_name: "The Walt Disney Company"
+  tickers: [DIS]
+  aliases: ["Disney", "Walt Disney", "迪士尼"]
+  sector: Communication Services
+  key_products: ["Disney+", "ESPN", "Hulu"]
+
+# ── ETFs / Indices (for benchmark reference) ────────────────
+
+SPY:
+  canonical_name: "SPDR S&P 500 ETF Trust"
+  tickers: [SPY]
+  aliases: ["S&P 500", "SPX", "S&P 500 index"]
+  sector: ETF
+  key_products: []
+
+QQQ:
+  canonical_name: "Invesco QQQ Trust"
+  tickers: [QQQ]
+  aliases: ["Nasdaq 100", "NDX", "tech index"]
+  sector: ETF
+  key_products: []

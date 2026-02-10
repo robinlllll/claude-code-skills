@@ -1,0 +1,288 @@
+---
+created: {{DATE}}
+type: feature-plan
+status: pending
+scope: {{SCOPE}}
+owner: Robin
+tags: [plan, feature, {{TAGS}}]
+related: []
+project: {{PROJECT}}
+---
+
+# {{PLAN_NAME}}
+
+## TLDR
+
+<!--
+3 句话概括：
+1. 做什么（What）
+2. 为什么（Why）
+3. 怎么做（How - 高层策略）
+-->
+
+{{TLDR}}
+
+## Success Criteria
+
+<!-- 可验证的完成条件，全部勾选 = 计划完成 -->
+
+- [ ] {{CRITERION_1}}
+- [ ] {{CRITERION_2}}
+- [ ] {{CRITERION_3}}
+- [ ] 所有测试通过
+- [ ] 文档已更新
+
+## Key Decisions
+
+<!-- 重要的技术/产品决策，记录选项和理由 -->
+
+| Decision | Options | Choice | Rationale |
+|----------|---------|--------|-----------|
+| {{DECISION_1}} | {{OPTIONS_1}} | {{CHOICE_1}} | {{RATIONALE_1}} |
+| {{DECISION_2}} | {{OPTIONS_2}} | {{CHOICE_2}} | {{RATIONALE_2}} |
+
+## Architecture Notes
+
+### Current State
+
+<!-- 现有架构简述 -->
+
+```
+{{CURRENT_ARCHITECTURE}}
+```
+
+### Proposed Changes
+
+<!-- 本功能带来的架构变更 -->
+
+```
+{{PROPOSED_ARCHITECTURE}}
+```
+
+### Components Affected
+
+| Component | Change Type | Description |
+|-----------|-------------|-------------|
+| {{COMPONENT_1}} | {{CHANGE_TYPE_1}} | {{CHANGE_DESC_1}} |
+| {{COMPONENT_2}} | {{CHANGE_TYPE_2}} | {{CHANGE_DESC_2}} |
+
+## API Contracts
+
+<!-- 如果涉及 API 变更 -->
+
+### New Endpoints
+
+#### `{{METHOD}} {{ENDPOINT}}`
+
+**Request:**
+```json
+{{REQUEST_BODY}}
+```
+
+**Response:**
+```json
+{{RESPONSE_BODY}}
+```
+
+### Modified Endpoints
+
+| Endpoint | Change | Breaking? |
+|----------|--------|-----------|
+| {{ENDPOINT_1}} | {{CHANGE_1}} | {{BREAKING_1}} |
+
+## Data Model Changes
+
+### New Tables/Collections
+
+#### `{{TABLE_NAME}}`
+
+| Column | Type | Constraints | Description |
+|--------|------|-------------|-------------|
+| id | INTEGER | PRIMARY KEY | |
+| {{COLUMN_1}} | {{TYPE_1}} | {{CONSTRAINTS_1}} | {{DESC_1}} |
+
+### Schema Migrations
+
+```sql
+-- Migration: {{MIGRATION_NAME}}
+{{MIGRATION_SQL}}
+```
+
+## Task Breakdown
+
+<!--
+任务状态：
+- [ ] pending
+- [x] done
+- [-] blocked (说明原因)
+- [~] in-progress
+
+任务 ID 格式：Phase.Task.Subtask (如 1.2.3)
+-->
+
+### Phase 1: Foundation
+
+- [ ] **1.1** {{TASK_1_1}}
+  - Subtasks:
+    - [ ] 1.1.1 {{SUBTASK_1_1_1}}
+    - [ ] 1.1.2 {{SUBTASK_1_1_2}}
+  - Dependencies: none
+  - Estimate: {{ESTIMATE_1_1}}
+  - Acceptance: {{ACCEPTANCE_1_1}}
+
+- [ ] **1.2** {{TASK_1_2}}
+  - Dependencies: 1.1
+  - Estimate: {{ESTIMATE_1_2}}
+  - Acceptance: {{ACCEPTANCE_1_2}}
+
+### Phase 2: Core Implementation
+
+- [ ] **2.1** {{TASK_2_1}}
+  - Dependencies: {{DEPS_2_1}}
+  - Estimate: {{ESTIMATE_2_1}}
+  - Acceptance: {{ACCEPTANCE_2_1}}
+
+- [ ] **2.2** {{TASK_2_2}}
+  - Dependencies: {{DEPS_2_2}}
+  - Estimate: {{ESTIMATE_2_2}}
+  - Acceptance: {{ACCEPTANCE_2_2}}
+
+### Phase 3: Integration
+
+- [ ] **3.1** {{TASK_3_1}}
+  - Dependencies: {{DEPS_3_1}}
+  - Estimate: {{ESTIMATE_3_1}}
+
+### Phase 4: Testing & Polish
+
+- [ ] **4.1** 编写单元测试
+  - Dependencies: Phase 2
+  - Estimate: 2h
+
+- [ ] **4.2** 编写集成测试
+  - Dependencies: Phase 3
+  - Estimate: 2h
+
+- [ ] **4.3** 更新文档
+  - Dependencies: 4.1, 4.2
+  - Estimate: 1h
+
+## Testing Strategy
+
+### Unit Tests
+
+| Component | Test Focus | Priority |
+|-----------|------------|----------|
+| {{COMPONENT_1}} | {{TEST_FOCUS_1}} | {{PRIORITY_1}} |
+
+### Integration Tests
+
+| Scenario | Description | Dependencies |
+|----------|-------------|--------------|
+| {{SCENARIO_1}} | {{SCENARIO_DESC_1}} | {{SCENARIO_DEPS_1}} |
+
+### Manual Test Cases
+
+- [ ] {{MANUAL_TEST_1}}
+- [ ] {{MANUAL_TEST_2}}
+
+## Risks & Mitigations
+
+| Risk | Impact | Likelihood | Mitigation |
+|------|--------|------------|------------|
+| {{RISK_1}} | High/Med/Low | High/Med/Low | {{MITIGATION_1}} |
+| {{RISK_2}} | High/Med/Low | High/Med/Low | {{MITIGATION_2}} |
+
+## Deployment Checklist
+
+### Pre-deployment
+
+- [ ] 所有测试通过
+- [ ] Code review 完成
+- [ ] 数据库迁移准备就绪
+- [ ] 配置变量已设置
+- [ ] 文档已更新
+
+### Deployment Steps
+
+1. {{DEPLOY_STEP_1}}
+2. {{DEPLOY_STEP_2}}
+3. {{DEPLOY_STEP_3}}
+
+### Post-deployment Verification
+
+- [ ] {{VERIFICATION_1}}
+- [ ] {{VERIFICATION_2}}
+
+## Rollback Plan
+
+### Triggers
+
+发生以下情况时考虑回滚：
+- {{ROLLBACK_TRIGGER_1}}
+- {{ROLLBACK_TRIGGER_2}}
+
+### Rollback Steps
+
+1. {{ROLLBACK_STEP_1}}
+2. {{ROLLBACK_STEP_2}}
+3. {{ROLLBACK_STEP_3}}
+
+### Data Recovery
+
+<!-- 如果需要数据恢复 -->
+
+```sql
+-- Rollback migration
+{{ROLLBACK_SQL}}
+```
+
+## Timeline
+
+| Phase | Target Start | Target End | Actual |
+|-------|--------------|------------|--------|
+| Phase 1 | {{START_1}} | {{END_1}} | - |
+| Phase 2 | {{START_2}} | {{END_2}} | - |
+| Phase 3 | {{START_3}} | {{END_3}} | - |
+| Phase 4 | {{START_4}} | {{END_4}} | - |
+
+## Progress Tracking
+
+| Phase | Status | Completed |
+|-------|--------|-----------|
+| Phase 1: Foundation | pending | - |
+| Phase 2: Core | pending | - |
+| Phase 3: Integration | pending | - |
+| Phase 4: Testing | pending | - |
+
+### Recent Updates
+
+<!-- 按时间倒序记录进展 -->
+
+- {{DATE}}: 计划创建
+
+## Notes & References
+
+### Design Notes
+
+<!-- 设计决策的详细说明 -->
+
+### Technical Notes
+
+<!-- 技术实现细节 -->
+
+### References
+
+<!-- 相关链接、文档 -->
+
+-
+
+### Related Plans
+
+<!-- 相关的其他计划 -->
+
+-
+
+---
+
+*Generated by /plan on {{DATE}}*

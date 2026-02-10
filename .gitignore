@@ -1,0 +1,21 @@
+# Python
+.venv/
+__pycache__/
+*.pyc
+*.egg-info/
+
+# Secrets
+.env
+
+# Browser state (chatgpt skill)
+**/browser_state/
+**/browser_profile/
+
+# Data files (runtime-generated, large)
+*.db
+*.sqlite
+*.sqlite3
+
+# OS
+.DS_Store
+Thumbs.db

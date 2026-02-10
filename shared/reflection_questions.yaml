@@ -1,0 +1,47 @@
+# Reflection Questions Configuration (v1.0)
+# Auto-appended to /research and /thesis output to combat cognitive biases.
+# See: Documents/Obsidian Vault/Projects/research-workflow-upgrade/PLAN.md
+
+version: "1.0"
+
+post_research:
+  - id: "R1"
+    question: "我的核心假设中，哪个最脆弱？如果它被证伪，影响多大？"
+    purpose: "识别单点失败风险"
+
+  - id: "R2"
+    question: "当前股价隐含了什么预期？我的观点与市场共识的差异具体在哪里？"
+    purpose: "对抗锚定效应，明确 variant perception"
+
+  - id: "R3"
+    question: "什么信号出现会让我改变看法？（具体、可观测、有时间框架）"
+    purpose: "预设 kill criteria，防止沉没成本谬误"
+
+  - id: "R4"
+    question: "我是否只搜集了支持自己观点的证据？反面最强的论点是什么？"
+    purpose: "对抗 confirmation bias"
+
+  - id: "R5"
+    question: "如果 6 个月后回看，我最可能错在哪？类似公司/行业的 base rate 是多少？"
+    purpose: "对抗过度自信，引入 outside view"
+
+  - id: "R6"
+    question: "我最近 2-4 周看到的信息，是否被我过度加权？如果忽略最近一个月的新闻，我的结论会改变吗？"
+    purpose: "对抗 recency/availability bias"
+
+  - id: "R7"
+    question: "如果我现在没有任何仓位，我还会得出同样的结论吗？"
+    purpose: "对抗 position-induced bias"
+
+post_trade:
+  - id: "T1"
+    question: "这笔交易的 thesis 和我上次更新 thesis 时相比，有新信息吗？还是纯粹情绪驱动？"
+    purpose: "区分信息驱动 vs 情绪驱动"
+
+  - id: "T2"
+    question: "如果这笔交易亏损 20%，我的反应会是加仓还是止损？现在就想清楚。"
+    purpose: "预承诺，防止事后合理化"
+
+  - id: "T3"
+    question: "谁在卖出？为什么他们认为是卖出的好时机？我是那个 'sucker at the table' 吗？"
+    purpose: "交易对手盘分析"

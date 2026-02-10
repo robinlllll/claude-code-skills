@@ -1,0 +1,22 @@
+{
+  "claims": [
+    {
+      "id": "C1",
+      "text": "投资者普遍存在确认偏差，只关注支持自己观点的信息",
+      "status": "supported",
+      "source": "user",
+      "created_at": "2026-02-01T22:37:15.241826",
+      "evidence": [
+        {
+          "type": "support",
+          "source_id": "Kahneman2011",
+          "text": "Thinking Fast and Slow 书中有大量实验证据支持确认偏差的存在",
+          "added_at": "2026-02-01T22:37:28.718441"
+        }
+      ],
+      "notes": []
+    }
+  ],
+  "next_id": 2,
+  "updated_at": "2026-02-01T22:37:28.718466"
+}

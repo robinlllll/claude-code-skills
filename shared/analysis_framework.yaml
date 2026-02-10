@@ -1,0 +1,515 @@
+# Central Analysis Framework Configuration
+# All skills reference this single source of truth.
+# To evolve the framework: add/modify sections here → all skills auto-detect changes.
+#
+# Based on Robin's CFA-level 9-section equity research framework (prompt 20250925.docx)
+
+version: "1.0"
+
+sections:
+  market_growth:
+    id: "S1"
+    name_en: "Market & Growth"
+    name_cn: "市场与增长"
+    icon: "📈"
+    weight: high  # First 4 sections get greater emphasis
+    subsections:
+      - id: "S1.1"
+        name: "TAM/SAM/SOM & Market Size"
+        key_questions:
+          - "What is the Total Addressable Market (TAM)?"
+          - "Bottom-up SAM analysis by geography and end market?"
+          - "Historic market growth rate and key drivers (penetration, volume, price)?"
+          - "Secular vs. cyclical growth drivers?"
+        keywords:
+          - "TAM"
+          - "SAM"
+          - "SOM"
+          - "market size"
+          - "addressable market"
+          - "市场规模"
+          - "市场容量"
+          - "total market"
+          - "market opportunity"
+          - "penetration rate"
+          - "渗透率"
+      - id: "S1.2"
+        name: "Industry Lifecycle & Cyclicality"
+        key_questions:
+          - "Where does the industry stand in its lifecycle (emerging/growing/mature/declining)?"
+          - "Is the industry cyclical? What drives the cycle?"
+          - "How does the industry perform in economic downturns?"
+          - "Current stage of the cycle? Margins vs. historical averages?"
+        keywords:
+          - "lifecycle"
+          - "cyclical"
+          - "secular"
+          - "mature"
+          - "emerging"
+          - "downturn"
+          - "recession"
+          - "行业周期"
+          - "生命周期"
+          - "周期性"
+          - "逆周期"
+          - "顺周期"
+          - "capacity"
+          - "capex cycle"
+      - id: "S1.3"
+        name: "Growth Drivers & Trends"
+        key_questions:
+          - "What are the primary growth drivers?"
+          - "Volume vs. price-driven growth?"
+          - "Industry CAGR outlook?"
+        keywords:
+          - "CAGR"
+          - "growth rate"
+          - "growth driver"
+          - "增长率"
+          - "增速"
+          - "驱动力"
+          - "organic growth"
+          - "同比增长"
+          - "年化增长"
+          - "tailwind"
+          - "headwind"
+
+  competitive_landscape:
+    id: "S2"
+    name_en: "Competitive Landscape"
+    name_cn: "竞争格局"
+    icon: "🏟️"
+    weight: high
+    subsections:
+      - id: "S2.1"
+        name: "Market Concentration & Rivalry"
+        key_questions:
+          - "Who are the key players and their market shares?"
+          - "HHI score and competition intensity?"
+          - "Market share volatility over 10-20 years?"
+          - "Who is gaining/losing share and why?"
+        keywords:
+          - "market share"
+          - "HHI"
+          - "concentration"
+          - "市场份额"
+          - "竞争格局"
+          - "份额"
+          - "competitor"
+          - "竞争对手"
+          - "rivalry"
+          - "oligopoly"
+          - "duopoly"
+      - id: "S2.2"
+        name: "Competitive Positioning & Value Proposition"
+        key_questions:
+          - "What is the company's value proposition?"
+          - "How does market share compare to peers?"
+          - "ASP trends — rising or falling?"
+        keywords:
+          - "value proposition"
+          - "positioning"
+          - "differentiation"
+          - "ASP"
+          - "pricing power"
+          - "定价权"
+          - "差异化"
+          - "competitive advantage"
+          - "竞争优势"
+      - id: "S2.3"
+        name: "Porter's Five Forces"
+        key_questions:
+          - "Threat of new entrants?"
+          - "Bargaining power of suppliers?"
+          - "Bargaining power of customers?"
+          - "Threat of substitutes?"
+          - "Industry rivalry intensity?"
+        keywords:
+          - "five forces"
+          - "Porter"
+          - "entry barrier"
+          - "supplier power"
+          - "buyer power"
+          - "substitute"
+          - "进入壁垒"
+          - "替代品"
+          - "议价能力"
+          - "switching cost"
+          - "转换成本"
+
+  moat:
+    id: "S3"
+    name_en: "Barriers & Moat"
+    name_cn: "护城河"
+    icon: "🏰"
+    weight: high
+    subsections:
+      - id: "S3.1"
+        name: "Unique Assets (Patents, Brand, Licenses)"
+        key_questions:
+          - "Patent portfolio strength and expiration timeline?"
+          - "Brand strength — utility-based vs story/legacy-based?"
+          - "Regulatory licenses and permits?"
+          - "Access to superior raw materials or locations?"
+        keywords:
+          - "patent"
+          - "brand"
+          - "license"
+          - "intellectual property"
+          - "IP"
+          - "专利"
+          - "品牌"
+          - "许可证"
+          - "know-how"
+          - "proprietary"
+          - "trademark"
+      - id: "S3.2"
+        name: "Switching Costs"
+        key_questions:
+          - "How embedded is the product in customers' operations?"
+          - "Cost to switch relative to product price?"
+          - "Churn and customer retention rates?"
+        keywords:
+          - "switching cost"
+          - "retention"
+          - "churn"
+          - "lock-in"
+          - "embedded"
+          - "转换成本"
+          - "留存率"
+          - "客户粘性"
+          - "stickiness"
+          - "renewal rate"
+      - id: "S3.3"
+        name: "Network Effects"
+        key_questions:
+          - "What kind of network effect (direct, two-sided, physical)?"
+          - "How does each additional node add value?"
+          - "Is the network closed or open? Multi-tenant?"
+        keywords:
+          - "network effect"
+          - "网络效应"
+          - "two-sided"
+          - "platform"
+          - "marketplace"
+          - "平台效应"
+          - "flywheel"
+          - "ecosystem"
+          - "生态系统"
+      - id: "S3.4"
+        name: "Economies of Scale"
+        key_questions:
+          - "How does the company benefit from increasing returns to scale?"
+          - "What is the efficient scale and how many can achieve it?"
+          - "Supply-side vs demand-side scale advantages?"
+        keywords:
+          - "scale"
+          - "economies of scale"
+          - "规模效应"
+          - "规模优势"
+          - "cost advantage"
+          - "成本优势"
+          - "fixed cost"
+          - "unit economics"
+          - "marginal cost"
+
+  company_financials:
+    id: "S4"
+    name_en: "Company & Financials"
+    name_cn: "公司与财务"
+    icon: "📊"
+    weight: high
+    subsections:
+      - id: "S4.1"
+        name: "Business Model & Revenue Streams"
+        key_questions:
+          - "What does the company do and who are its customers?"
+          - "How does the company generate revenue?"
+          - "Revenue mix by segment/geography?"
+        keywords:
+          - "revenue"
+          - "business model"
+          - "营收"
+          - "收入"
+          - "商业模式"
+          - "revenue mix"
+          - "segment"
+          - "业务线"
+          - "客户"
+          - "customer"
+      - id: "S4.2"
+        name: "Margins & Profitability"
+        key_questions:
+          - "Gross margin, operating margin, net margin trends?"
+          - "Marginal profitability by business line?"
+          - "Margin expansion or compression drivers?"
+        keywords:
+          - "margin"
+          - "gross margin"
+          - "operating margin"
+          - "net margin"
+          - "毛利率"
+          - "营业利润率"
+          - "净利率"
+          - "profitability"
+          - "盈利"
+          - "EBITDA"
+          - "利润"
+          - "profit"
+      - id: "S4.3"
+        name: "Growth Trends & Capital Allocation"
+        key_questions:
+          - "YoY and QoQ revenue growth over 5-10 years?"
+          - "Organic vs. acquisition-driven growth?"
+          - "Capital allocation: investments, debt, buybacks, dividends?"
+        keywords:
+          - "revenue growth"
+          - "earnings growth"
+          - "buyback"
+          - "dividend"
+          - "capex"
+          - "acquisition"
+          - "capital allocation"
+          - "资本配置"
+          - "回购"
+          - "分红"
+          - "并购"
+          - "M&A"
+          - "free cash flow"
+          - "FCF"
+
+  management:
+    id: "S5"
+    name_en: "Management & Governance"
+    name_cn: "管理层"
+    icon: "👔"
+    weight: normal
+    subsections:
+      - id: "S5.1"
+        name: "Board & Independence"
+        key_questions:
+          - "Director qualifications and experience?"
+          - "Board independence — long-tenure directors (10+ years)?"
+          - "Compensation structure? Poison pills?"
+        keywords:
+          - "board"
+          - "director"
+          - "independent"
+          - "governance"
+          - "董事会"
+          - "独立董事"
+          - "公司治理"
+      - id: "S5.2"
+        name: "Management Quality & Incentives"
+        key_questions:
+          - "Management background and tenure?"
+          - "Short-term vs long-term incentive structure?"
+          - "Performance metrics and peer group?"
+        keywords:
+          - "CEO"
+          - "CFO"
+          - "management"
+          - "compensation"
+          - "incentive"
+          - "管理层"
+          - "薪酬"
+          - "激励"
+          - "executive"
+          - "leadership"
+      - id: "S5.3"
+        name: "Alignment & Insider Activity"
+        key_questions:
+          - "Insider ownership levels and recent activity?"
+          - "Shareholder voting structure and proxy access?"
+          - "How does compensation change year to year?"
+        keywords:
+          - "insider"
+          - "ownership"
+          - "insider buying"
+          - "insider selling"
+          - "内部人"
+          - "持股"
+          - "proxy"
+          - "shareholder"
+          - "股东"
+          - "voting"
+
+  valuation:
+    id: "S6"
+    name_en: "Valuation"
+    name_cn: "估值"
+    icon: "💰"
+    weight: normal
+    subsections:
+      - id: "S6.1"
+        name: "Multiples & Relative Valuation"
+        key_questions:
+          - "Trading above or below historical multiples?"
+          - "Valued appropriately relative to competitors?"
+          - "What drives the valuation premium/discount?"
+        keywords:
+          - "PE"
+          - "P/E"
+          - "EV/EBITDA"
+          - "P/S"
+          - "P/B"
+          - "valuation"
+          - "multiple"
+          - "估值"
+          - "市盈率"
+          - "倍数"
+          - "premium"
+          - "discount"
+          - "overvalued"
+          - "undervalued"
+          - "低估"
+          - "高估"
+      - id: "S6.2"
+        name: "Historical Returns & Drawdown"
+        key_questions:
+          - "Returns driven by valuation expansion or EPS growth?"
+          - "Drawdowns >40% after IPO — how many, when, what caused them?"
+        keywords:
+          - "return"
+          - "drawdown"
+          - "回撤"
+          - "收益率"
+          - "回报"
+          - "total return"
+          - "shareholder return"
+          - "max drawdown"
+
+  risks:
+    id: "S7"
+    name_en: "Risks"
+    name_cn: "风险"
+    icon: "⚠️"
+    weight: normal
+    subsections:
+      - id: "S7.1"
+        name: "Risk Categories"
+        key_questions:
+          - "Industry cycle risks?"
+          - "Operational, regulatory, financial, technology, strategic risks?"
+          - "Historical precedents of similar companies encountering these risks?"
+        keywords:
+          - "risk"
+          - "风险"
+          - "regulatory"
+          - "监管"
+          - "litigation"
+          - "lawsuit"
+          - "tariff"
+          - "关税"
+          - "geopolitical"
+          - "地缘"
+          - "compliance"
+          - "合规"
+          - "debt"
+          - "leverage"
+          - "杠杆"
+          - "disruption"
+          - "threat"
+          - "headwind"
+          - "downside"
+
+  conclusion:
+    id: "S8"
+    name_en: "Investment Conclusion"
+    name_cn: "投资结论"
+    icon: "🎯"
+    weight: normal
+    subsections:
+      - id: "S8.1"
+        name: "Bull/Bear/Base Case"
+        key_questions:
+          - "Is the industry growing? Future trends?"
+          - "Competitive advantage strengthening or weakening?"
+          - "Key debates around this stock?"
+          - "Bull, Bear, Base case with probabilities?"
+          - "Key events to watch?"
+        keywords:
+          - "bull case"
+          - "bear case"
+          - "base case"
+          - "target price"
+          - "目标价"
+          - "看多"
+          - "看空"
+          - "catalyst"
+          - "催化剂"
+          - "thesis"
+          - "conviction"
+          - "确信度"
+          - "probability"
+          - "scenario"
+
+  research_gaps:
+    id: "S9"
+    name_en: "Research Gaps"
+    name_cn: "研究盲区"
+    icon: "🔍"
+    weight: normal
+    subsections:
+      - id: "S9.1"
+        name: "Data Gaps & Further Research"
+        key_questions:
+          - "What immediate data gaps exist?"
+          - "Important resources worth reading?"
+          - "Important datasets or industry resources?"
+          - "Key industry figures and their materials?"
+        keywords:
+          - "gap"
+          - "missing"
+          - "unknown"
+          - "缺失"
+          - "盲区"
+          - "further research"
+          - "TODO"
+          - "待研究"
+          - "data needed"
+          - "need to verify"
+
+# Data source relevance mapping: which sources are most useful for each section
+data_source_mapping:
+  S1:
+    primary: [earnings_analysis, research_notes, podcast]
+    secondary: [wechat, substack, chatgpt]
+  S2:
+    primary: [earnings_analysis, supply_chain, research_notes]
+    secondary: [podcast, 13f]
+  S3:
+    primary: [earnings_analysis, research_notes, thesis]
+    secondary: [podcast, chatgpt, substack]
+  S4:
+    primary: [earnings_analysis, research_notes, thesis]
+    secondary: [13f, chatgpt]
+  S5:
+    primary: [earnings_analysis, research_notes]
+    secondary: [13f, podcast]
+  S6:
+    primary: [research_notes, thesis, 13f]
+    secondary: [chatgpt, earnings_analysis]
+  S7:
+    primary: [earnings_analysis, research_notes, thesis]
+    secondary: [podcast, wechat, substack]
+  S8:
+    primary: [thesis, research_notes]
+    secondary: [chatgpt, podcast]
+  S9:
+    primary: [thesis, research_notes]
+    secondary: [chatgpt]
+
+# Tagging configuration
+tagging:
+  keyword_threshold: 2  # Min keyword hits to tag a section
+  subsection_threshold: 1  # Min keyword hits to tag a subsection
+  skill_modes:
+    podcast: "hybrid"
+    meeting_transcript: "llm"
+    wechat_hao: "hybrid"
+    substack: "hybrid"
+    x_bookmarks: "keyword"
+    chatgpt_organizer: "keyword"
+    supply_chain: "keyword"
+    xueqiu: "hybrid"

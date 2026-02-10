@@ -1,0 +1,17 @@
+# Core
+python-dotenv>=1.0.0
+
+# Gemini API for Devil's Advocate
+google-generativeai>=0.8.0
+
+# OpenAI API for Perspective Agent
+openai>=1.0.0
+
+# HTTP client
+httpx>=0.28.0
+
+# Rich terminal output
+rich>=13.0.0
+
+# Date handling
+python-dateutil>=2.8.0
