@@ -20,9 +20,11 @@ CONFIG_FILE = SKILL_DIR / "data" / "config.json"
 DEFAULT_CONFIG = {
     "gemini_api_key": "",
     "openai_api_key": "",
+    "grok_api_key": "",
     "gemini_model": "gemini-3-pro-preview",  # Gemini 3 Pro for devil's advocate
     "obsidian_path": r"C:\Users\thisi\Documents\Obsidian Vault\思考性文章",
     "chatgpt_model": "gpt-5.2-chat-latest",  # OpenAI model for perspective
+    "grok_model": "grok-4-1-fast-reasoning",  # xAI Grok for contrarian analysis
     "default_question_depth": 3,  # How many rounds of questions per type
     "auto_research": True,  # Automatically trigger research on gaps
     "include_research_in_export": True,
@@ -79,6 +81,11 @@ def cmd_show():
         print("  ✓ Gemini API configured")
     else:
         print("  ✗ Gemini API not configured (run: config.py set-gemini-key YOUR_KEY)")
+
+    if config.get("grok_api_key"):
+        print("  ✓ Grok API configured")
+    else:
+        print("  ✗ Grok API not configured (run: config.py set grok_api_key YOUR_KEY)")
 
     obsidian_path = Path(config.get("obsidian_path", ""))
     if obsidian_path.exists():

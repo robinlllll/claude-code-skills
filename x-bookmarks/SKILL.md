@@ -1,6 +1,6 @@
 # X.com Bookmarks to Obsidian
 
-Import X (Twitter) bookmarks exported via the [twitter-web-exporter](https://github.com/prinsss/twitter-web-exporter) Chrome extension into Obsidian notes.
+Import X (Twitter) bookmarks exported via the [twitter-web-exporter](https://github.com/prinsss/twitter-web-exporter) Chrome extension into Obsidian notes. Also supports saving individual tweets by URL.
 
 ## Project Location
 
@@ -11,20 +11,39 @@ Import X (Twitter) bookmarks exported via the [twitter-web-exporter](https://git
 - User wants to import X/Twitter bookmarks into Obsidian
 - User mentions "x bookmarks", "twitter bookmarks", or "tweet import"
 - User has a JSON export from twitter-web-exporter
+- User wants to save a single tweet URL
 
 ## Commands
 
 | Command | Description |
 |---------|-------------|
-| `/x-bookmarks import {json_file}` | Import exported bookmarks JSON into Obsidian notes |
+| `/x-bookmarks import` | Auto-find export in ~/Downloads and import |
+| `/x-bookmarks import {json_file}` | Import from explicit JSON path |
+| `/x-bookmarks save {tweet_url}` | Save a single tweet by URL (uses yt-dlp) |
 | `/x-bookmarks stats` | Show import statistics (total imported, by author, date range) |
 
-### Import Bookmarks
+### Import Bookmarks (auto-find)
+
+```bash
+cd "C:\Users\thisi\.claude\skills\x-bookmarks"
+python x_bookmark_converter.py import
+```
+Scans `~/Downloads` for `twitter-Bookmarks-*.json`, `twitter-*.json`, `bookmarks*.json`, or `*bookmark*.json` (newest first).
+
+### Import Bookmarks (explicit path)
 
 ```bash
 cd "C:\Users\thisi\.claude\skills\x-bookmarks"
 python x_bookmark_converter.py import "C:\path\to\bookmarks.json"
 ```
+
+### Save Single Tweet
+
+```bash
+cd "C:\Users\thisi\.claude\skills\x-bookmarks"
+python x_bookmark_converter.py save "https://x.com/user/status/1234567890"
+```
+Fetches tweet metadata via `yt-dlp` (uses Chrome cookies for auth), then saves to Obsidian. No browser extension needed.
 
 ### Show Statistics
 
@@ -37,17 +56,23 @@ python x_bookmark_converter.py stats
 
 1. **Export:** Install [twitter-web-exporter](https://github.com/prinsss/twitter-web-exporter) Chrome extension
 2. **Export:** Open X.com bookmarks page, click the extension to export as JSON
-3. **Import:** Run `/x-bookmarks import path/to/bookmarks.json`
+3. **Import:** Run `/x-bookmarks import` (auto-finds in Downloads) or `/x-bookmarks import path/to/bookmarks.json`
 4. **Review:** Notes appear in `Documents/Obsidian Vault/X Bookmarks/`
+
+**Single tweet workflow:** Just run `/x-bookmarks save <url>` — no export needed.
 
 ## Features
 
-1. **Thread Detection:** Multiple tweets from the same author in reply to each other are merged into a single note
-2. **Ticker Detection:** Identifies $TICKER patterns and company names via shared entity dictionary
-3. **Deduplication:** Uses shared ingestion_state.db to skip already-imported tweets
-4. **Flexible Parsing:** Handles multiple JSON structures from twitter-web-exporter gracefully
-5. **Media Links:** Preserves image/video URLs as markdown links
-6. **Quoted Tweets:** Formats quoted tweets as blockquotes within the note
+1. **Auto-Find Export:** Scans ~/Downloads for bookmark JSON files, picks newest
+2. **Single Tweet Save:** Save individual tweets by URL via yt-dlp (no extension needed)
+3. **Thread Detection:** Multiple tweets from the same author in reply to each other are merged into a single note
+4. **Ticker Detection:** Identifies $TICKER patterns and company names via shared entity dictionary
+5. **Framework Tagging:** Auto-tags content with analysis framework sections (keyword mode)
+6. **Pipeline Tracking:** Records each import to ingestion pipeline for stage tracking
+7. **Deduplication:** Uses shared ingestion_state.db to skip already-imported tweets
+8. **Flexible Parsing:** Handles multiple JSON structures from twitter-web-exporter gracefully
+9. **Media Links:** Preserves image/video URLs as markdown links
+10. **Quoted Tweets:** Formats quoted tweets as blockquotes within the note
 
 ## Output
 
@@ -79,39 +104,9 @@ is_thread: false
 
 ## Dependencies
 
-- Python 3.x (no extra pip packages required beyond PyYAML for shared ticker detection)
-- Shared utilities: `~/.claude/skills/shared/` (frontmatter_utils, ticker_detector)
-
-## Framework Tagging (after ticker detection)
-
-在 ticker 检测之后，自动标注内容属于分析框架的哪些维度：
-```python
-from shared.framework_tagger import tag_content
-sections = tag_content(text, mode="keyword")  # keyword mode for X bookmarks (fast)
-```
-将结果添加到 frontmatter extra dict：
-```yaml
-framework_sections: [S1, S4.2, S7]
-```
-如果 `framework_tagger` 不可用或返回空列表，跳过（不报错）。
-
-## Pipeline Tracking
-
-**自动执行:** 每个 bookmark 处理后，记录到 ingestion pipeline（如果 task_manager 可用）：
-```python
-try:
-    from shared.task_manager import record_pipeline_entry
-    record_pipeline_entry(
-        canonical_key=canonical_key,  # from record_ingestion()
-        item_type="x-bookmark", item_title=tweet_text[:80],
-        source_platform="x-bookmark", obsidian_path=str(output_path),
-        has_frontmatter=True, has_tickers=bool(tickers),
-        has_framework_tags=bool(framework_sections),
-        tickers_found=tickers, framework_sections=framework_sections,
-    )
-except ImportError:
-    pass
-```
+- Python 3.x + PyYAML (for shared ticker detection)
+- `yt-dlp` (for single tweet save mode): `pip install yt-dlp`
+- Shared utilities: `~/.claude/skills/shared/` (frontmatter_utils, ticker_detector, framework_tagger, task_manager)
 
 ## Related
 

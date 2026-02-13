@@ -19,13 +19,16 @@ from typing import Optional
 SKILL_DIR = Path(os.environ.get("SKILL_DIR", Path(__file__).parent.parent))
 SESSIONS_DIR = SKILL_DIR / "data" / "sessions"
 
+
 def generate_session_id() -> str:
     """Generate a short unique session ID."""
     return uuid.uuid4().hex[:12]
 
+
 def get_session_path(session_id: str) -> Path:
     """Get the path to a session directory."""
     return SESSIONS_DIR / session_id
+
 
 def load_session(session_id: str) -> Optional[dict]:
     """Load a session's state."""
@@ -34,6 +37,7 @@ def load_session(session_id: str) -> Optional[dict]:
         return None
     with open(state_file, "r", encoding="utf-8") as f:
         return json.load(f)
+
 
 def save_session(session_id: str, state: dict):
     """Save a session's state."""
@@ -44,6 +48,7 @@ def save_session(session_id: str, state: dict):
 
     with open(session_path / "state.json", "w", encoding="utf-8") as f:
         json.dump(state, f, indent=2, ensure_ascii=False)
+
 
 def cmd_new(topic: str):
     """Create a new writing session."""
@@ -67,25 +72,22 @@ def cmd_new(topic: str):
         "created_at": datetime.now().isoformat(),
         "updated_at": datetime.now().isoformat(),
         "tags": [],
-        "summary": ""
+        "summary": "",
     }
     save_session(session_id, state)
 
     # Initialize dialogue
-    dialogue = {
-        "entries": [],
-        "research_gaps": [],
-        "key_insights": []
-    }
+    dialogue = {"entries": [], "research_gaps": [], "key_insights": []}
     with open(session_path / "dialogue.json", "w", encoding="utf-8") as f:
         json.dump(dialogue, f, indent=2, ensure_ascii=False)
 
     print(f"✓ Created new session: {session_id}")
     print(f"  Topic: {topic}")
     print(f"  Path: {session_path}")
-    print(f"\nNext: Claude will begin Socratic questioning to deepen your idea.")
+    print("\nNext: Claude will begin Socratic questioning to deepen your idea.")
 
     return session_id
+
 
 def cmd_list():
     """List all sessions."""
@@ -113,14 +115,19 @@ def cmd_list():
     for s in sessions:
         topic = s.get("topic", "")[:38]
         updated = s.get("updated_at", "")[:16]
-        print(f"{s['id']:<14} {s.get('status', 'unknown'):<10} {s.get('phase', 'unknown'):<12} {topic:<40} {updated:<20}")
+        print(
+            f"{s['id']:<14} {s.get('status', 'unknown'):<10} {s.get('phase', 'unknown'):<12} {topic:<40} {updated:<20}"
+        )
+
 
 def cmd_status(session_id: Optional[str] = None):
     """Show status of current or specified session."""
     if not session_id:
         # Find most recent active session
         if not SESSIONS_DIR.exists():
-            print("No sessions found. Create one with: session.py new --topic 'your idea'")
+            print(
+                "No sessions found. Create one with: session.py new --topic 'your idea'"
+            )
             return
 
         active_sessions = []
@@ -131,7 +138,9 @@ def cmd_status(session_id: Optional[str] = None):
                     active_sessions.append(state)
 
         if not active_sessions:
-            print("No active sessions. Create one with: session.py new --topic 'your idea'")
+            print(
+                "No active sessions. Create one with: session.py new --topic 'your idea'"
+            )
             return
 
         # Get most recent
@@ -180,6 +189,7 @@ def cmd_status(session_id: Optional[str] = None):
         drafts = list(drafts_dir.glob("*.md"))
         print(f"\nDrafts: {len(drafts)}")
 
+
 def cmd_resume(session_id: str):
     """Resume a session."""
     state = load_session(session_id)
@@ -198,6 +208,7 @@ def cmd_resume(session_id: str):
     print(f"✓ Resumed session: {session_id}")
     cmd_status(session_id)
 
+
 def cmd_close(session_id: str):
     """Close/complete a session."""
     state = load_session(session_id)
@@ -209,6 +220,7 @@ def cmd_close(session_id: str):
     state["phase"] = "complete"
     save_session(session_id, state)
     print(f"✓ Closed session: {session_id}")
+
 
 def cmd_add_dialogue(session_id: str, question: str, answer: str, question_type: str):
     """Add a dialogue entry to a session."""
@@ -226,7 +238,7 @@ def cmd_add_dialogue(session_id: str, question: str, answer: str, question_type:
         "question": question,
         "answer": answer,
         "type": question_type,
-        "timestamp": datetime.now().isoformat()
+        "timestamp": datetime.now().isoformat(),
     }
     dialogue["entries"].append(entry)
 
@@ -234,6 +246,7 @@ def cmd_add_dialogue(session_id: str, question: str, answer: str, question_type:
         json.dump(dialogue, f, indent=2, ensure_ascii=False)
 
     print(f"✓ Added dialogue entry to session {session_id}")
+
 
 def main():
     if len(sys.argv) < 2:
@@ -297,8 +310,41 @@ def main():
             return
         cmd_close(session_id)
 
+    elif command == "add-dialogue":
+        session_id = question = answer = question_type = None
+        for i, arg in enumerate(sys.argv):
+            if arg == "--session" and i + 1 < len(sys.argv):
+                session_id = sys.argv[i + 1]
+            if arg == "--question" and i + 1 < len(sys.argv):
+                question = sys.argv[i + 1]
+            if arg == "--answer" and i + 1 < len(sys.argv):
+                answer = sys.argv[i + 1]
+            if arg == "--type" and i + 1 < len(sys.argv):
+                question_type = sys.argv[i + 1]
+        if not all([session_id, question, answer]):
+            print("Error: --session, --question, --answer are required")
+            return
+        cmd_add_dialogue(session_id, question, answer, question_type or "unknown")
+
+    elif command == "update-summary":
+        session_id = summary = None
+        for i, arg in enumerate(sys.argv):
+            if arg == "--session" and i + 1 < len(sys.argv):
+                session_id = sys.argv[i + 1]
+            if arg == "--summary" and i + 1 < len(sys.argv):
+                summary = sys.argv[i + 1]
+        if not session_id or not summary:
+            print("Error: --session and --summary are required")
+            return
+        state = load_session(session_id)
+        if state:
+            state["summary"] = summary
+            save_session(session_id, state)
+            print(f"✓ Updated summary for session {session_id}")
+
     else:
         print(f"Unknown command: {command}")
+
 
 if __name__ == "__main__":
     main()

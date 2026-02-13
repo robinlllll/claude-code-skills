@@ -16,6 +16,18 @@ __pycache__/
 *.db
 *.sqlite
 *.sqlite3
+**/data/sessions/
+**/data/history.json
+**/data/config.json
+**/data/*_cache.json
+**/data/*_auth.json
+**/chatgpt_auth.json
+shared/data/
+vault-intel/data/
+sellside-tracker/data/*.yaml
+
+# Log files
+*.log
 
 # OS
 .DS_Store

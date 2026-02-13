@@ -13,7 +13,7 @@ sys.path.insert(0, r"C:\Users\thisi\.claude\skills")
 
 from supply_chain_db import get_mentions_by, get_mentions_for, get_stats
 
-OBSIDIAN_DIR = Path.home() / "Documents" / "Obsidian Vault" / "Supply Chain"
+OBSIDIAN_DIR = Path.home() / "Documents" / "Obsidian Vault" / "研究" / "供应链"
 
 
 def generate_mention_note(ticker: str) -> Path | None:

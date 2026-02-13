@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
-Parallel Debate - Run Gemini (quantitative) + GPT (qualitative) challenges simultaneously,
-then conduct a rebuttal round where each AI responds to the other's challenges.
+Parallel Debate - Run Gemini (quantitative) + GPT (qualitative) + Grok (contrarian) challenges
+simultaneously, then conduct a rebuttal round where each AI responds to the others' challenges.
 
 Usage:
     debate.py run --session ID           # Full debate: parallel challenges + rebuttals
@@ -31,17 +31,19 @@ from session import load_session, get_session_path
 
 # --- Role-Specialized Prompts ---
 
-GEMINI_QUANTITATIVE_PROMPT = """你是一位量化投资分析师和魔鬼代言人。你的专长是数字、估值和可量化的假设。
+GEMINI_QUANTITATIVE_PROMPT = """你是一位量化分析师和魔鬼代言人。你的专长是数字、数据和可量化的假设。
+
+根据用户讨论的主题领域（投资、技术、商业、社会等）调整你的分析框架和具体例子。
 
 ## 你的专属领域：量化挑战
 
 你只关注以下维度的质疑：
-1. **数字验证** — 用户引用的任何数字（增长率、市场规模、利润率）是否合理？交叉验证来源
+1. **数字验证** — 用户引用的任何数字（增长率、规模、比率）是否合理？交叉验证来源
 2. **时间线/概率** — 用户隐含的时间假设和成功概率是否经得起推敲？
-3. **DCF/估值假设** — 折现率、终端增长率、利润率假设中的漏洞
-4. **市场规模错误** — TAM/SAM/SOM 是否合理？是否犯了"人口 x 渗透率"的懒惰估算？
-5. **财务不一致** — 收入增长 vs 利润率趋势、capex vs 折旧、现金流 vs 利润的矛盾
-6. **基率谬误** — 用户的预测相对于行业基率是否异常？历史上类似情况的成功率是多少？
+3. **核心定量模型假设** — 关键模型中的假设漏洞（投资场景如 DCF/估值；技术场景如采用率曲线；商业场景如单位经济）
+4. **规模估算错误** — 市场规模、影响范围、受众数量的估算是否合理？
+5. **数据不一致** — 论点中引用的不同数据之间是否存在矛盾？
+6. **基率谬误** — 用户的预测相对于历史基率是否异常？类似情况的成功率是多少？
 
 ## 输出格式
 
@@ -50,7 +52,7 @@ GEMINI_QUANTITATIVE_PROMPT = """你是一位量化投资分析师和魔鬼代言
 {{{{
   "challenges": [
     {{{{
-      "type": "量化挑战类型：估值漏洞|数字验证|概率校准|基率谬误|财务矛盾|市场规模高估|时间错配",
+      "type": "量化挑战类型：模型漏洞|数字验证|概率校准|基率谬误|数据矛盾|规模高估|时间错配",
       "target_claim": "直接引用用户的原话",
       "quantitative_challenge": "用数字反驳。例如：'用户假设30%增长率，但行业中位数是12%，且只有5%的公司维持>25%增长超过3年'",
       "data_to_verify": "要验证这个挑战，具体查什么数据？指明：数据源、指标、时间范围",
@@ -59,9 +61,9 @@ GEMINI_QUANTITATIVE_PROMPT = """你是一位量化投资分析师和魔鬼代言
     }}}}
   ],
   "valuation_stress_test": {{{{
-    "bull_case_assumptions": "用户的牛市假设列表",
-    "bear_case_numbers": "如果关键假设下调20-30%，估值会变成什么？",
-    "breakeven_analysis": "什么条件下这个投资的预期回报归零？"
+    "optimistic_assumptions": "用户的乐观假设列表",
+    "downside_numbers": "如果关键假设下调20-30%，结论会变成什么？",
+    "breakeven_analysis": "什么条件下这个论点的预期收益归零？"
   }}}},
   "confidence_calibration": {{{{
     "quantitative_score": 5,
@@ -72,7 +74,7 @@ GEMINI_QUANTITATIVE_PROMPT = """你是一位量化投资分析师和魔鬼代言
 
 ## 核心规则
 1. 每个挑战必须包含具体数字或可查证的数据点
-2. 禁止泛泛而谈 — "估值可能偏高"不如"用户隐含的EV/EBITDA 25x，而可比公司中位数是15x"
+2. 禁止泛泛而谈 — "数字可能有问题"不如给出具体的对比数据和参考基准
 3. 禁止定性评论 — 那是你同事(GPT)的工作
 4. quantitative_score 范围 1-10：1=数字完全站不住；5=关键假设未验证；10=量化论证极其稳固
 
@@ -89,17 +91,19 @@ GEMINI_QUANTITATIVE_PROMPT = """你是一位量化投资分析师和魔鬼代言
 用中文回应。"""
 
 
-GPT_QUALITATIVE_PROMPT = """你是一位资深的定性投资分析师和视角补充者。你的专长是竞争动态、管理层质量、叙事分析和行为金融。
+GPT_QUALITATIVE_PROMPT = """你是一位资深的定性分析师和视角补充者。你的专长是竞争动态、叙事分析、利益相关者分析和行为偏差。
+
+根据用户讨论的主题领域（投资、技术、商业、社会等）调整你的分析框架和具体例子。
 
 ## 你的专属领域：定性挑战
 
 你只关注以下维度的分析：
-1. **竞争动态** — 用户是否低估了竞争对手的反应？护城河是否真的存在？Porter五力分析中的薄弱环节
-2. **管理层质量** — 管理层的历史执行记录、激励结构、资本配置能力、是否有"帝国建设"倾向
-3. **叙事一致性** — 用户的投资故事是否自洽？是否有"为结论找证据"的倾向？叙事转变的风险
-4. **市场情绪/行为偏差** — 当前市场对这个公司/行业的情绪定位。用户可能犯的行为偏差（锚定、确认偏误、过度自信等）
-5. **利益相关者分析** — 用户忽略了哪些利益相关者（供应商、客户、监管者、员工）？他们的行为会如何影响论点？
-6. **叙事风险** — 什么事件或信息会导致市场叙事180度转变？
+1. **竞争/对手动态** — 用户是否低估了对手的反应？优势壁垒是否真的存在？
+2. **执行者质量** — 关键决策者的历史执行记录、激励结构、能力边界
+3. **叙事一致性** — 用户的故事是否自洽？是否有"为结论找证据"的倾向？叙事转变的风险
+4. **情绪/行为偏差** — 当前主流情绪定位。用户可能犯的行为偏差（锚定、确认偏误、过度自信等）
+5. **利益相关者分析** — 用户忽略了哪些利益相关者？他们的行为会如何影响论点？
+6. **叙事风险** — 什么事件或信息会导致主流叙事180度转变？
 
 ## 输出格式
 
@@ -139,7 +143,97 @@ GPT_QUALITATIVE_PROMPT = """你是一位资深的定性投资分析师和视角�
 用中文回应。"""
 
 
-GEMINI_REBUTTAL_PROMPT = """你是一位量化投资分析师。你的同事（定性分析师）刚刚提出了以下定性挑战：
+GROK_CONTRARIAN_PROMPT = """你是一位逆向思考者和结构分析师。你的专长是挑战共识、识别二阶效应和反身性风险。
+
+根据用户讨论的主题领域（投资、技术、商业、社会等）调整你的分析框架和具体例子。
+
+## 你的专属领域：逆向与结构性挑战
+
+你只关注以下维度的分析：
+1. **共识陷阱** — 当前主流共识是什么？这个共识为什么可能是错的？"大多数人相信X，但如果Y呢？"
+2. **二阶效应** — 用户的论点考虑了直接影响，但忽略了哪些间接影响、反馈循环和意外后果？
+3. **反身性风险** — 信念本身如何改变现实？行为如何自我实现或自我否定？
+4. **观点拥挤度** — 这个观点有多拥挤？同样持有这个观点的人是谁？当他们同时改变看法时会发生什么？
+5. **时间错配** — 用户的长期论点是否忽略了短期可能的致命冲击？或者短期信号是否掩盖了长期结构性问题？
+6. **非对称风险** — 上行和下行是否对称？隐含假设是什么？哪个方向的意外更可能发生？
+
+## 输出格式
+
+请提供结构化的分析（Markdown格式）：
+
+### 逆向挑战
+
+对每个挑战，使用以下格式：
+
+**挑战 N: [类型]** (严重性: minor/major/critical)
+- **共识观点:** 市场当前相信什么
+- **逆向论点:** 为什么共识可能是错的
+- **二阶效应:** 被忽略的间接影响
+- **触发条件:** 什么事件会让逆向观点成为现实
+
+### 拥挤度与反身性评估
+- 这个观点的拥挤程度（1-10）
+- 反身性风险描述
+
+### 时间结构分析
+- 短期（<6月）、中期（6-18月）、长期（>18月）各自的关键风险
+- 时间维度上最大的认知盲区
+
+### 非对称评估
+- **逆向思考评分:** X/10（10=完全逆共识且有逻辑支撑）
+- **最大逆向风险:** 一句话总结
+- **"如果反过来呢？":** 将用户的核心论点完全反转，构建一个同样合理的反面案例
+
+---
+主题：{topic}
+
+内容：
+{content}
+
+问答历史：
+{dialogue}
+---
+
+用中文回应。"""
+
+
+GROK_REBUTTAL_PROMPT = """你是一位逆向思考者。你的两位同事分别从量化和定性角度提出了挑战：
+
+量化挑战（Gemini）：
+{gemini_output}
+
+定性挑战（GPT）：
+{gpt_output}
+
+请从逆向/结构性角度回应：
+1. 两位同事的挑战本身是否也陷入了某种共识思维？
+2. 他们的分析框架有什么盲点？（例如：都假设市场是理性的）
+3. 综合两者的观点，真正的"黑天鹅"风险是什么——一个他们都没提到的场景？
+4. 如果把所有人的观点（包括原始论点和两位同事的挑战）都反转，最合理的逆向叙事是什么？
+
+原始论点供参考：
+主题：{topic}
+内容：{content}
+
+请用 Markdown 格式回应：
+
+### 对同事分析框架的挑战
+- 量化分析师的盲点
+- 定性分析师的盲点
+
+### 综合黑天鹅场景
+- 所有人都没想到的风险场景
+
+### 终极逆向叙事
+- 如果一切都反过来，最合理的故事是什么？
+
+### 共识陷阱警告
+- 三位分析师（包括我自己）可能共同陷入的思维陷阱
+
+用中文回应。"""
+
+
+GEMINI_REBUTTAL_PROMPT = """你是一位量化分析师。你的同事（定性分析师）刚刚提出了以下定性挑战：
 
 {gpt_output}
 
@@ -176,7 +270,7 @@ GEMINI_REBUTTAL_PROMPT = """你是一位量化投资分析师。你的同事（�
 用中文回应。"""
 
 
-GPT_REBUTTAL_PROMPT = """你是一位定性投资分析师。你的同事（量化分析师）刚刚提出了以下量化挑战：
+GPT_REBUTTAL_PROMPT = """你是一位定性分析师。你的同事（量化分析师）刚刚提出了以下量化挑战：
 
 {gemini_output}
 
@@ -271,6 +365,24 @@ def _get_openai_client():
         raise ImportError("openai not installed. Run: pip install openai")
 
 
+def _get_grok_client():
+    """Initialize Grok client (uses OpenAI SDK with xAI base_url)."""
+    try:
+        from openai import OpenAI
+
+        config = load_config()
+        api_key = config.get("grok_api_key")
+        if not api_key:
+            raise ValueError("Grok API key not configured. Run: config.py set grok_api_key YOUR_KEY")
+
+        model = config.get("grok_model", "grok-4-1-fast-reasoning")
+        client = OpenAI(api_key=api_key, base_url="https://api.x.ai/v1")
+        return client, model
+
+    except ImportError:
+        raise ImportError("openai not installed. Run: pip install openai")
+
+
 def _extract_tickers_and_suggest(text: str):
     """Extract tickers from challenge text and print research suggestions."""
     try:
@@ -356,6 +468,58 @@ async def _call_gpt_qualitative(topic: str, content: str, dialogue: str) -> str:
 
     result_text, usage = await loop.run_in_executor(None, _call)
     return result_text
+
+
+async def _call_grok_contrarian(topic: str, content: str, dialogue: str) -> str:
+    """Call Grok with contrarian/market-structure prompt."""
+    client, model = _get_grok_client()
+
+    prompt = GROK_CONTRARIAN_PROMPT.format(
+        topic=topic,
+        content=content,
+        dialogue=dialogue,
+    )
+
+    loop = asyncio.get_event_loop()
+
+    def _call():
+        resp = client.chat.completions.create(
+            model=model,
+            messages=[{"role": "user", "content": prompt}],
+        )
+        return resp.choices[0].message.content, resp.usage
+
+    result_text, usage = await loop.run_in_executor(None, _call)
+    return result_text
+
+
+async def _call_grok_rebuttal(gemini_output, gpt_output: str, topic: str, content: str) -> str:
+    """Grok rebuts both Gemini and GPT from a contrarian perspective."""
+    client, model = _get_grok_client()
+
+    # Format gemini output for the prompt
+    if isinstance(gemini_output, dict):
+        gemini_text = json.dumps(gemini_output, ensure_ascii=False, indent=2)
+    else:
+        gemini_text = str(gemini_output)
+
+    prompt = GROK_REBUTTAL_PROMPT.format(
+        gemini_output=gemini_text,
+        gpt_output=gpt_output,
+        topic=topic,
+        content=content,
+    )
+
+    loop = asyncio.get_event_loop()
+
+    def _call():
+        resp = client.chat.completions.create(
+            model=model,
+            messages=[{"role": "user", "content": prompt}],
+        )
+        return resp.choices[0].message.content
+
+    return await loop.run_in_executor(None, _call)
 
 
 async def _call_gemini_rebuttal(gpt_output: str, topic: str, content: str) -> dict:
@@ -452,6 +616,22 @@ def _display_gpt_result(result_text: str):
     print(result_text)
 
 
+def _display_grok_result(result_text: str):
+    """Display Grok contrarian challenges."""
+    print("\n" + "=" * 60)
+    print("GROK: CONTRARIAN / MARKET STRUCTURE CHALLENGES")
+    print("=" * 60)
+    print(result_text)
+
+
+def _display_grok_rebuttal(result_text: str):
+    """Display Grok's rebuttal to both Gemini and GPT."""
+    print("\n" + "=" * 60)
+    print("GROK REBUTTAL (Contrarian response to Gemini + GPT)")
+    print("=" * 60)
+    print(result_text)
+
+
 def _display_gemini_rebuttal(result: dict):
     """Display Gemini's rebuttal to GPT."""
     print("\n" + "=" * 60)
@@ -509,27 +689,32 @@ async def cmd_debate_parallel(session_id: str):
 
     print(f"Session: {session_id}")
     print(f"Topic: {topic}")
-    print("\nLaunching parallel debate: Gemini (quantitative) + GPT (qualitative)...")
+    print("\nLaunching parallel debate: Gemini (quantitative) + GPT (qualitative) + Grok (contrarian)...")
 
-    # Run both in parallel
-    gemini_result, gpt_result = await asyncio.gather(
+    # Run all three in parallel
+    gemini_result, gpt_result, grok_result = await asyncio.gather(
         _call_gemini_quantitative(topic, content, dialogue_text),
         _call_gpt_qualitative(topic, content, dialogue_text),
+        _call_grok_contrarian(topic, content, dialogue_text),
         return_exceptions=True,
     )
 
     # Handle errors
     gemini_ok = not isinstance(gemini_result, BaseException)
     gpt_ok = not isinstance(gpt_result, BaseException)
+    grok_ok = not isinstance(grok_result, BaseException)
 
     if not gemini_ok:
         print(f"\nGemini error: {gemini_result}")
     if not gpt_ok:
         print(f"\nGPT error: {gpt_result}")
+    if not grok_ok:
+        print(f"\nGrok error: {grok_result}")
 
-    if not gemini_ok and not gpt_ok:
-        print("\nBoth AI calls failed. Check API keys with: config.py show")
-        return None, None
+    ok_count = sum([gemini_ok, gpt_ok, grok_ok])
+    if ok_count == 0:
+        print("\nAll AI calls failed. Check API keys with: config.py show")
+        return None, None, None
 
     # Save results
     challenges_dir = session_path / "challenges"
@@ -561,12 +746,27 @@ async def cmd_debate_parallel(session_id: str):
 
         _display_gpt_result(gpt_result)
 
+    if grok_ok:
+        grok_record = {
+            "timestamp": datetime.now().isoformat(),
+            "session_id": session_id,
+            "mode": "contrarian",
+            "model": load_config().get("grok_model", "grok-4-1-fast-reasoning"),
+            "response": grok_result,
+        }
+        with open(challenges_dir / "grok.json", "w", encoding="utf-8") as f:
+            json.dump(grok_record, f, indent=2, ensure_ascii=False)
+
+        _display_grok_result(grok_result)
+
     # Auto-research suggestions
     all_text = ""
     if gemini_ok:
         all_text += json.dumps(gemini_result, ensure_ascii=False) if isinstance(gemini_result, dict) else str(gemini_result)
     if gpt_ok:
         all_text += "\n" + (gpt_result if isinstance(gpt_result, str) else str(gpt_result))
+    if grok_ok:
+        all_text += "\n" + (grok_result if isinstance(grok_result, str) else str(grok_result))
     _extract_tickers_and_suggest(all_text)
 
     print("\n" + "=" * 60)
@@ -574,11 +774,12 @@ async def cmd_debate_parallel(session_id: str):
     print("=" * 60)
     print(f"  Gemini (quantitative): {'OK' if gemini_ok else 'FAILED'}")
     print(f"  GPT (qualitative): {'OK' if gpt_ok else 'FAILED'}")
+    print(f"  Grok (contrarian): {'OK' if grok_ok else 'FAILED'}")
     print(f"\nNext steps:")
     print(f"  debate.py rebuttal --session {session_id}   # Run rebuttal round")
     print(f"  devil.py respond --session {session_id} --text '...'  # Record your response")
 
-    return gemini_result if gemini_ok else None, gpt_result if gpt_ok else None
+    return gemini_result if gemini_ok else None, gpt_result if gpt_ok else None, grok_result if grok_ok else None
 
 
 async def cmd_rebuttal(session_id: str):
@@ -609,21 +810,26 @@ async def cmd_rebuttal(session_id: str):
     print("Launching rebuttal round...")
     print("  Gemini will respond to GPT's qualitative challenges")
     print("  GPT will respond to Gemini's quantitative challenges")
+    print("  Grok will challenge both from a contrarian perspective")
 
-    # Run rebuttals in parallel
-    gemini_rebuttal, gpt_rebuttal = await asyncio.gather(
+    # Run rebuttals in parallel (Grok rebuts both)
+    gemini_rebuttal, gpt_rebuttal, grok_rebuttal = await asyncio.gather(
         _call_gemini_rebuttal(gpt_output, topic, content),
         _call_gpt_rebuttal(gemini_output, topic, content),
+        _call_grok_rebuttal(gemini_output, gpt_output, topic, content),
         return_exceptions=True,
     )
 
     gemini_ok = not isinstance(gemini_rebuttal, BaseException)
     gpt_ok = not isinstance(gpt_rebuttal, BaseException)
+    grok_ok = not isinstance(grok_rebuttal, BaseException)
 
     if not gemini_ok:
         print(f"\nGemini rebuttal error: {gemini_rebuttal}")
     if not gpt_ok:
         print(f"\nGPT rebuttal error: {gpt_rebuttal}")
+    if not grok_ok:
+        print(f"\nGrok rebuttal error: {grok_rebuttal}")
 
     # Save rebuttals
     if gemini_ok:
@@ -650,12 +856,26 @@ async def cmd_rebuttal(session_id: str):
 
         _display_gpt_rebuttal(gpt_rebuttal)
 
+    if grok_ok:
+        rebuttal_record = {
+            "timestamp": datetime.now().isoformat(),
+            "session_id": session_id,
+            "type": "grok_rebuttal_to_both",
+            "response": grok_rebuttal,
+        }
+        with open(challenges_dir / "grok_rebuttal.json", "w", encoding="utf-8") as f:
+            json.dump(rebuttal_record, f, indent=2, ensure_ascii=False)
+
+        _display_grok_rebuttal(grok_rebuttal)
+
     # Auto-research suggestions from rebuttals
     all_text = ""
     if gemini_ok:
         all_text += json.dumps(gemini_rebuttal, ensure_ascii=False) if isinstance(gemini_rebuttal, dict) else str(gemini_rebuttal)
     if gpt_ok:
         all_text += "\n" + (gpt_rebuttal if isinstance(gpt_rebuttal, str) else str(gpt_rebuttal))
+    if grok_ok:
+        all_text += "\n" + (grok_rebuttal if isinstance(grok_rebuttal, str) else str(grok_rebuttal))
     _extract_tickers_and_suggest(all_text)
 
     print("\n" + "=" * 60)
@@ -663,11 +883,14 @@ async def cmd_rebuttal(session_id: str):
     print("=" * 60)
     print(f"  Gemini rebuttal: {'OK' if gemini_ok else 'FAILED'}")
     print(f"  GPT rebuttal: {'OK' if gpt_ok else 'FAILED'}")
+    print(f"  Grok rebuttal: {'OK' if grok_ok else 'FAILED'}")
     print(f"  Files saved:")
     if gemini_ok:
         print(f"    {challenges_dir / 'gemini_rebuttal.json'}")
     if gpt_ok:
         print(f"    {challenges_dir / 'gpt_rebuttal.json'}")
+    if grok_ok:
+        print(f"    {challenges_dir / 'grok_rebuttal.json'}")
     print(f"\nNext steps:")
     print(f"  arbitrate.py compare --session {session_id}   # Compare all AI opinions")
     print(f"  export.py obsidian --session {session_id}      # Export to Obsidian")
@@ -681,13 +904,13 @@ async def cmd_full_debate(session_id: str):
 
     # Phase 1: Parallel challenges
     print("\n--- Phase 1: Parallel Challenges ---\n")
-    gemini_result, gpt_result = await cmd_debate_parallel(session_id)
+    gemini_result, gpt_result, grok_result = await cmd_debate_parallel(session_id)
 
-    if gemini_result is None and gpt_result is None:
+    if gemini_result is None and gpt_result is None and grok_result is None:
         print("\nAborting debate: no challenges generated.")
         return
 
-    # Phase 2: Rebuttal round (only if both succeeded)
+    # Phase 2: Rebuttal round (requires at least Gemini and GPT)
     if gemini_result is not None and gpt_result is not None:
         print("\n\n--- Phase 2: Rebuttal Round ---\n")
         await cmd_rebuttal(session_id)
@@ -711,8 +934,10 @@ def cmd_status(session_id: str):
     files = {
         "gemini.json": "Gemini (quantitative)",
         "gpt.json": "GPT (qualitative)",
+        "grok.json": "Grok (contrarian)",
         "gemini_rebuttal.json": "Gemini rebuttal",
         "gpt_rebuttal.json": "GPT rebuttal",
+        "grok_rebuttal.json": "Grok rebuttal",
     }
 
     for fname, label in files.items():
@@ -729,8 +954,10 @@ def cmd_status(session_id: str):
     # Suggest next step
     has_gemini = (challenges_dir / "gemini.json").exists()
     has_gpt = (challenges_dir / "gpt.json").exists()
+    has_grok = (challenges_dir / "grok.json").exists()
     has_rebuttal_g = (challenges_dir / "gemini_rebuttal.json").exists()
     has_rebuttal_p = (challenges_dir / "gpt_rebuttal.json").exists()
+    has_rebuttal_k = (challenges_dir / "grok_rebuttal.json").exists()
 
     print()
     if not has_gemini or not has_gpt:
@@ -739,6 +966,8 @@ def cmd_status(session_id: str):
         print(f"Next: debate.py rebuttal --session {session_id}")
     else:
         print(f"Debate complete! Next: arbitrate.py compare --session {session_id}")
+    if not has_grok:
+        print(f"  Note: Grok (contrarian) not yet run. Re-run challenge to include.")
 
 
 def main():

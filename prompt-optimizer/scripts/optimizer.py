@@ -438,9 +438,37 @@ def cmd_review(args) -> int:
         history_excerpt=history_excerpt,
     )
 
-    # Check if GPT is available
+    # Check if GPT is available, fall back to Grok (xAI) if not
     openai_key = load_api_key("OPENAI_API_KEY")
-    use_gpt = bool(openai_key) and not args.no_gpt
+    xai_key = load_api_key("XAI_API_KEY")
+    use_gpt = not args.no_gpt
+    gpt_label = "GPT"
+    gpt_base_url = None
+    gpt_api_key = openai_key
+
+    if use_gpt:
+        # Try GPT first, then fall back to Grok
+        if openai_key:
+            try:
+                test_gpt = GPTClient(api_key=openai_key, model=args.gpt_model)
+                if not test_gpt.health_check():
+                    raise ConnectionError("GPT health check failed")
+            except Exception:
+                if xai_key:
+                    print("  [INFO] GPT unavailable, falling back to Grok (xAI)")
+                    gpt_api_key = xai_key
+                    gpt_base_url = "https://api.x.ai/v1"
+                    args.gpt_model = "grok-4-1-fast-reasoning"
+                    gpt_label = "Grok"
+                else:
+                    use_gpt = False
+        elif xai_key:
+            gpt_api_key = xai_key
+            gpt_base_url = "https://api.x.ai/v1"
+            args.gpt_model = "grok-4-1-fast-reasoning"
+            gpt_label = "Grok"
+        else:
+            use_gpt = False
 
     # --- Parallel execution ---
     gemini_review_text = ""
@@ -455,15 +483,17 @@ def cmd_review(args) -> int:
         return client.review_prompt(**review_kwargs)
 
     def _run_gpt():
-        """Run GPT review (Edge Case Hunter)."""
-        gpt = GPTClient(api_key=openai_key, model=args.gpt_model)
+        """Run GPT/Grok review (Edge Case Hunter)."""
+        gpt = GPTClient(
+            api_key=gpt_api_key, model=args.gpt_model, base_url=gpt_base_url
+        )
         return gpt.review_prompt(**review_kwargs)
 
     if use_gpt:
         # Both models available: run in parallel
         print(f"Reviewing v{v} in parallel:")
         print(f"  Gemini ({args.model}) -> Spec Compliance Auditor")
-        print(f"  GPT ({args.gpt_model}) -> Edge Case Hunter")
+        print(f"  {gpt_label} ({args.gpt_model}) -> Edge Case Hunter")
         print(f"  Timeout: {REVIEW_TIMEOUT}s per model")
         print()
 
@@ -492,13 +522,13 @@ def cmd_review(args) -> int:
                 gpt_time = time.time() - t0
                 gpt_model_name = args.gpt_model
                 gpt_review_text = gpt_result.text
-                print(f"  [OK] GPT completed in {gpt_time:.1f}s")
+                print(f"  [OK] {gpt_label} completed in {gpt_time:.1f}s")
             except TimeoutError:
                 gpt_time = REVIEW_TIMEOUT
-                print(f"  [TIMEOUT] GPT timed out after {REVIEW_TIMEOUT}s")
+                print(f"  [TIMEOUT] {gpt_label} timed out after {REVIEW_TIMEOUT}s")
             except Exception as e:
                 gpt_time = time.time() - t0
-                print(f"  [ERROR] GPT failed: {e}")
+                print(f"  [ERROR] {gpt_label} failed: {e}")
     else:
         # Gemini only
         print(

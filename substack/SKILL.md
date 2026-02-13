@@ -11,6 +11,8 @@ Sync Substack newsletter articles into Obsidian vault with automatic summarizati
 - User says `/substack sync` to pull all new articles
 - User says `/substack add {url}` to add a new subscription
 - User says `/substack list` to show current subscriptions
+- User says `/substack status` to check feed health
+- User says `/substack remove` to unsubscribe from a feed
 - User mentions "substack", "newsletter sync", or "RSS feed"
 
 ## Commands
@@ -25,13 +27,26 @@ Pulls all new articles from subscribed feeds, deduplicates, and saves summaries 
 ```bash
 /substack add https://doomberg.substack.com
 ```
-Accepts either `https://name.substack.com` or `https://name.substack.com/feed`. Normalizes to feed URL automatically.
+Accepts either `https://name.substack.com` or `https://name.substack.com/feed`. Normalizes to feed URL automatically. **Auto-verifies** feed reachability on add.
 
 ### List Subscriptions
 ```bash
 /substack list
 ```
-Shows all configured Substack feeds.
+Shows all configured Substack feeds with add dates.
+
+### Feed Status Dashboard
+```bash
+/substack status
+```
+Shows per-feed health: article count, last sync date, RSS reachability. Useful for spotting dead feeds or sync issues.
+
+### Remove Feed
+```bash
+/substack remove 1                 # by index from 'list'
+/substack remove doomberg          # by name substring
+```
+Removes a feed from config. Shows updated list after removal.
 
 ## CLI Usage
 
@@ -39,7 +54,17 @@ Shows all configured Substack feeds.
 python "C:\Users\thisi\.claude\skills\substack\substack_fetcher.py" sync
 python "C:\Users\thisi\.claude\skills\substack\substack_fetcher.py" add "https://doomberg.substack.com"
 python "C:\Users\thisi\.claude\skills\substack\substack_fetcher.py" list
+python "C:\Users\thisi\.claude\skills\substack\substack_fetcher.py" status
+python "C:\Users\thisi\.claude\skills\substack\substack_fetcher.py" remove 1
 ```
+
+## Scheduled Sync
+
+Daily auto-sync at 08:00 via Windows Task Scheduler:
+- **Script:** `~/scripts/substack_daily_sync.py`
+- **Wrapper:** `~/scripts/substack_daily_sync.bat`
+- **Register:** `~/scripts/register_substack_daily.bat` (run once as admin)
+- **Log:** `~/scripts/logs/substack_sync.log`
 
 ## Workflow
 
@@ -55,7 +80,7 @@ python "C:\Users\thisi\.claude\skills\substack\substack_fetcher.py" list
 
 | Item | Location |
 |------|----------|
-| Obsidian notes | `Documents/Obsidian Vault/信息源/Substack/{author_name}/YYYY-MM-DD - {title}.md` |
+| Obsidian notes | `Documents/Obsidian Vault/Substack/{author_name}/YYYY-MM-DD - {title}.md` |
 | Raw HTML cache | `.claude/skills/substack/raw_cache/` (local only) |
 | Feed config | `.claude/skills/substack/substack_feeds.yaml` |
 

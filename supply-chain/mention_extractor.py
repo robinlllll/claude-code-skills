@@ -1,17 +1,24 @@
 """Core extraction pipeline for supply chain mentions.
 
-Reads earnings transcript PDFs, chunks by speaker turn, calls Gemini 2.0 Flash
+Reads earnings transcript PDFs, chunks by speaker turn, calls Gemini
 to extract company mentions, resolves entities, and stores in SQLite.
 
 v0: Mention index only. No relationship classification.
 """
 
 import asyncio
+import io
 import json
 import os
 import re
 import sys
 from pathlib import Path
+
+# Fix Windows terminal encoding for Chinese output
+if sys.stdout and hasattr(sys.stdout, "buffer"):
+    sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8", errors="replace")
+if sys.stderr and hasattr(sys.stderr, "buffer"):
+    sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding="utf-8", errors="replace")
 
 # Add skills root so shared imports work
 sys.path.insert(0, r"C:\Users\thisi\.claude\skills")
@@ -37,7 +44,7 @@ TRANSCRIPT_DIR = Path(r"C:\Users\thisi\Downloads\Earnings Transcripts")
 PROMPT_VERSION = "v0"
 LLM_MODEL = "gemini-2.0-flash"
 MAX_TOKENS_PER_CHUNK = 2000  # Approximate tokens per chunk
-GEMINI_SEMAPHORE = asyncio.Semaphore(3)  # Limit concurrent Gemini calls
+GEMINI_SEMAPHORE = asyncio.Semaphore(7)  # Limit concurrent Gemini calls
 
 # Load API key from 13F-CLAUDE .env or environment
 _env_path = Path(r"C:\Users\thisi\13F-CLAUDE\.env")
@@ -312,10 +319,11 @@ async def extract_mentions_from_chunk(
     source_ticker: str,
     transcript_date: str,
     client: genai.Client,
-) -> list[dict]:
+) -> list[dict] | None:
     """Extract company mentions from a single chunk using Gemini.
 
-    Returns list of mention dicts ready for database insertion.
+    Returns list of mention dicts ready for database insertion,
+    or None if the API call failed (to distinguish from "no mentions found").
     """
     prompt = MENTION_EXTRACTION_PROMPT.format(
         source_company=source_company,
@@ -334,7 +342,7 @@ async def extract_mentions_from_chunk(
             raw_mentions = _parse_gemini_json(response.text)
         except Exception as e:
             print(f"    [ERROR] Gemini call failed for {chunk['chunk_id']}: {e}")
-            return []
+            return None  # Distinguish API error from "no mentions"
 
     # Process and validate each mention
     valid_mentions = []
@@ -503,14 +511,29 @@ async def process_transcript(pdf_path: Path) -> dict:
     # Extract mentions via Gemini
     client = _init_gemini_client()
     all_mentions = []
+    error_count = 0
 
     for i, chunk in enumerate(chunks):
         mentions = await extract_mentions_from_chunk(
             chunk, company, ticker, transcript_date, client
         )
-        all_mentions.extend(mentions)
-        if mentions:
+        if mentions is None:
+            error_count += 1
+        elif mentions:
+            all_mentions.extend(mentions)
             print(f"    Chunk {i + 1}/{len(chunks)}: {len(mentions)} mentions")
+
+    # If ALL chunks failed, don't mark as processed
+    if error_count == len(chunks):
+        print(f"    [SKIP] All {len(chunks)} chunks failed — not marking as processed")
+        return {
+            "status": "error",
+            "reason": "all_chunks_failed",
+            "path": file_path_str,
+        }
+
+    if error_count > 0:
+        print(f"    [WARN] {error_count}/{len(chunks)} chunks failed")
 
     # Store in database
     if all_mentions:
@@ -718,10 +741,21 @@ def main():
         default=None,
         help="Only process transcripts for a specific ticker",
     )
+    scan_parser.add_argument(
+        "--tickers",
+        type=str,
+        default=None,
+        help="Comma-separated list of tickers to process (e.g., NVDA,AAPL,MSFT)",
+    )
 
     # query command
     query_parser = subparsers.add_parser("query", help="Query mentions for a ticker")
     query_parser.add_argument("ticker", type=str, help="Ticker to look up")
+
+    # generate command
+    subparsers.add_parser(
+        "generate", help="Generate Obsidian notes from mention database"
+    )
 
     # stats command
     subparsers.add_parser("stats", help="Show database statistics")
@@ -731,31 +765,70 @@ def main():
     if args.command == "scan":
         transcript_dir = Path(args.dir) if args.dir else TRANSCRIPT_DIR
 
+        # Build ticker list from --ticker or --tickers
+        ticker_list = []
         if args.ticker:
-            # Find folder for specific ticker
-            ticker_upper = args.ticker.upper()
-            matching = [
-                d
-                for d in transcript_dir.iterdir()
-                if d.is_dir() and f"({ticker_upper}-" in d.name
+            ticker_list = [args.ticker.upper()]
+        elif args.tickers:
+            ticker_list = [
+                t.strip().upper() for t in args.tickers.split(",") if t.strip()
             ]
-            if not matching:
-                print(f"No transcript folder found for ticker: {ticker_upper}")
-                sys.exit(1)
-            # Process only PDFs in matching folders
+
+        if ticker_list:
+            # Find folders for specified tickers
             init_db()
             total_mentions = 0
-            for folder in matching:
-                print(f"\nScanning: {folder.name}")
-                for pdf_path in sorted(folder.glob("*.pdf")):
-                    if not is_transcript_processed(str(pdf_path)):
+            total_processed = 0
+            total_errors = 0
+            not_found = []
+
+            for ticker_upper in ticker_list:
+                matching = [
+                    d
+                    for d in transcript_dir.iterdir()
+                    if d.is_dir() and f"({ticker_upper}-" in d.name
+                ]
+                if not matching:
+                    not_found.append(ticker_upper)
+                    continue
+
+                for folder in matching:
+                    pdfs = [
+                        p
+                        for p in sorted(folder.glob("*.pdf"))
+                        if not is_transcript_processed(str(p))
+                    ]
+                    if not pdfs:
+                        continue
+                    print(f"\n[{ticker_upper}] {folder.name} — {len(pdfs)} new PDFs")
+                    for pdf_path in pdfs:
                         result = asyncio.run(process_transcript(pdf_path))
                         if result["status"] == "processed":
+                            total_processed += 1
                             total_mentions += result["mentions"]
-            print(f"\nDone. Total mentions: {total_mentions}")
+                        elif result["status"] == "error":
+                            total_errors += 1
+
+            print(f"\n{'=' * 60}")
+            print(
+                f"Done. {total_processed} transcripts, {total_mentions} mentions, {total_errors} errors"
+            )
+            if not_found:
+                print(f"No transcript folders for: {', '.join(not_found)}")
         else:
             result = asyncio.run(scan_all_transcripts(transcript_dir))
             print(f"\nResult: {json.dumps(result, indent=2)}")
+
+        # Auto-generate Obsidian notes after scan
+        from supply_chain_obsidian import generate_all_notes
+
+        print("\nGenerating Obsidian notes...")
+        generate_all_notes()
+
+    elif args.command == "generate":
+        from supply_chain_obsidian import generate_all_notes
+
+        generate_all_notes()
 
     elif args.command == "query":
         _print_mentions_for(args.ticker)

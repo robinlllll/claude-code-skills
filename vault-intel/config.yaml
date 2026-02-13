@@ -1,0 +1,52 @@
+vault_path: "C:\\Users\\thisi\\Documents\\Obsidian Vault"
+portfolio_path: "C:\\Users\\thisi\\PORTFOLIO"
+thirteenf_path: "C:\\Users\\thisi\\13F-CLAUDE"
+
+# Hygiene agent
+hygiene:
+  scan_folders:
+    - "收件箱"
+    - "研究"
+    - "信息源"
+    - "周会"
+    - "写作"
+  ignore_folders: [".obsidian", ".trash", "归档"]
+  min_content_bytes: 50
+  date_prefix_required: true
+  auto_fix_frontmatter: true
+  auto_fix_date_prefix: false  # DISABLED: renaming breaks wikilinks
+
+# Research linker
+linker:
+  lookback_days: 7
+  min_match_confidence: "exact"
+  ticker_blocklist: [ALL, NOW, IT, CAN, A, B, C, D, F, K, M, N, O, R, T, U, V, W, X, Y]
+  link_section: "## Related"
+
+# Kill criteria monitor
+kill_criteria:
+  stale_check_days: 14
+  violation_hours: 48
+  pnl_alert_pct: -10
+  position_alert_pct: 5
+
+# 13F delta
+thirteenf:
+  min_position_change_pct: 20
+  min_value_k: 10000
+  tracked_managers: []  # Empty = all managers
+
+# Briefing
+briefing:
+  output_folder: "导航/Nightly-Intel"
+  max_action_items: 10
+
+# Safety
+safety:
+  lock_file: true
+  lock_timeout_hours: 2
+  atomic_writes: true
+  max_renames_per_run: 0
+
+# Scheduling
+schedule_time: "21:00"

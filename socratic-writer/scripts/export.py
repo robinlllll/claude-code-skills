@@ -21,8 +21,12 @@ from session import load_session, get_session_path
 from config import load_config
 
 
-def generate_obsidian_content(session_id: str, include_research: bool = True,
-                               include_challenges: bool = True, include_dialogue: bool = True) -> str:
+def generate_obsidian_content(
+    session_id: str,
+    include_research: bool = True,
+    include_challenges: bool = True,
+    include_dialogue: bool = True,
+) -> str:
     """Generate Obsidian-formatted markdown content."""
     state = load_session(session_id)
     if not state:
@@ -33,7 +37,7 @@ def generate_obsidian_content(session_id: str, include_research: bool = True,
     # Start building content
     now = datetime.now()
     frontmatter = f"""---
-created: {now.strftime('%Y-%m-%d')}
+created: {now.strftime("%Y-%m-%d")}
 type: thought-piece
 status: draft
 source: socratic-writer
@@ -64,6 +68,78 @@ tags: [思考, 观点]
                 content += f"- {insight}\n"
             content += "\n"
 
+    # Grok Synthesis section (new: tensions + evaluation)
+    synthesis_dir = session_path / "synthesis"
+    tensions_file = synthesis_dir / "tensions.json"
+    eval_file = synthesis_dir / "evaluation.json"
+    response_file = synthesis_dir / "user_response.json"
+
+    if tensions_file.exists():
+        with open(tensions_file, "r", encoding="utf-8") as f:
+            tensions_data = json.load(f)
+
+        t_result = tensions_data.get("result", {})
+        thesis_strength = t_result.get("thesis_strength", {})
+
+        if thesis_strength:
+            content += "## 论点评估\n\n"
+            content += f"**论点强度:** {thesis_strength.get('score', '?')}/10\n\n"
+            content += (
+                f"- **最强点:** {thesis_strength.get('strongest_point', 'N/A')}\n"
+            )
+            content += f"- **最弱点:** {thesis_strength.get('weakest_point', 'N/A')}\n"
+            content += f"- **最应修改:** {thesis_strength.get('one_thing_to_change', 'N/A')}\n\n"
+
+        tensions = t_result.get("unresolved_tensions", [])
+        if tensions:
+            content += "## 核心张力\n\n"
+            for i, t in enumerate(tensions, 1):
+                content += f"### 张力 {i}: {t.get('tension', '')}\n\n"
+                content += f"- **来源:** {t.get('from', '?')}\n"
+                content += f"- **重要性:** {t.get('why_it_matters', '')}\n"
+                content += f"- **聚焦问题:** {t.get('focused_question', '')}\n\n"
+
+        resolved = t_result.get("resolved_points", [])
+        if resolved:
+            content += "### 已解决的点\n\n"
+            for r in resolved:
+                content += f"- {r}\n"
+            content += "\n"
+
+    # User response to tensions
+    if response_file.exists():
+        with open(response_file, "r", encoding="utf-8") as f:
+            resp_data = json.load(f)
+        if resp_data.get("response"):
+            content += "## 作者回应（论点 v2）\n\n"
+            content += resp_data["response"] + "\n\n"
+
+    # Final evaluation
+    if eval_file.exists():
+        with open(eval_file, "r", encoding="utf-8") as f:
+            eval_data = json.load(f)
+
+        e_result = eval_data.get("result", {})
+        content += "## 最终评估\n\n"
+        content += f"**最终评分:** {e_result.get('final_score', '?')}/10 — {e_result.get('verdict', '?').upper()}\n\n"
+
+        improvements = e_result.get("improvements", [])
+        if improvements:
+            content += "**改进:**\n"
+            for imp in improvements:
+                content += f"- {imp}\n"
+            content += "\n"
+
+        remaining = e_result.get("remaining_weaknesses", [])
+        if remaining:
+            content += "**待解决:**\n"
+            for w in remaining:
+                content += f"- {w}\n"
+            content += "\n"
+
+        if e_result.get("recommendation"):
+            content += f"**建议:** {e_result['recommendation']}\n\n"
+
     # Challenges section
     if include_challenges:
         challenges_dir = session_path / "challenges"
@@ -76,31 +152,46 @@ tags: [思考, 观点]
 
             result = gemini_data.get("result", {})
             if "challenges" in result:
-                content += "## 反论点与挑战\n\n"
-                content += "| 挑战 | 类型 | 我的回应 |\n"
-                content += "|------|------|----------|\n"
+                content += "## 量化挑战 (Gemini)\n\n"
+                content += "| 挑战 | 类型 | 严重性 |\n"
+                content += "|------|------|--------|\n"
 
                 for c in result["challenges"]:
-                    challenge_text = c.get("challenge", "").replace("|", "\\|").replace("\n", " ")[:80]
-                    content += f"| {challenge_text} | {c.get('type', 'N/A')} | *待回应* |\n"
+                    challenge_text = (
+                        c.get("quantitative_challenge", c.get("challenge", ""))
+                        .replace("|", "\\|")
+                        .replace("\n", " ")[:80]
+                    )
+                    content += f"| {challenge_text} | {c.get('type', 'N/A')} | {c.get('severity', '?')} |\n"
 
                 content += "\n"
 
-                if result.get("overall_weakness"):
-                    content += f"**整体弱点**: {result['overall_weakness']}\n\n"
+                cc = result.get("confidence_calibration", {})
+                if cc:
+                    content += f"**量化评分:** {cc.get('quantitative_score', '?')}/10\n"
+                    content += (
+                        f"**最脆弱假设:** {cc.get('most_fragile_number', 'N/A')}\n\n"
+                    )
 
-                if result.get("devil_rating"):
-                    content += f"**论证稳固度**: {result['devil_rating']}/10\n\n"
-
-        # GPT perspectives
+        # GPT qualitative
         gpt_file = challenges_dir / "gpt.json"
         if gpt_file.exists():
             with open(gpt_file, "r", encoding="utf-8") as f:
                 gpt_data = json.load(f)
 
             if gpt_data.get("response"):
-                content += "## 补充视角 (GPT)\n\n"
+                content += "## 定性挑战 (GPT)\n\n"
                 content += gpt_data["response"] + "\n\n"
+
+        # Grok contrarian
+        grok_file = challenges_dir / "grok.json"
+        if grok_file.exists():
+            with open(grok_file, "r", encoding="utf-8") as f:
+                grok_data = json.load(f)
+
+            if grok_data.get("response"):
+                content += "## 逆向挑战 (Grok)\n\n"
+                content += grok_data["response"] + "\n\n"
 
     # Research section
     if include_research:
@@ -112,7 +203,9 @@ tags: [思考, 观点]
             if log.get("entries"):
                 content += "## 研究笔记\n\n"
                 for entry in log["entries"]:
-                    content += f"### [{entry['source'].upper()}] {entry['query'][:50]}...\n\n"
+                    content += (
+                        f"### [{entry['source'].upper()}] {entry['query'][:50]}...\n\n"
+                    )
                     if entry.get("response"):
                         response = entry["response"][:1000]
                         content += f"{response}\n\n"
@@ -142,8 +235,12 @@ tags: [思考, 观点]
     return content
 
 
-def cmd_obsidian(session_id: str, include_research: bool = True,
-                  include_challenges: bool = True, include_dialogue: bool = True):
+def cmd_obsidian(
+    session_id: str,
+    include_research: bool = True,
+    include_challenges: bool = True,
+    include_dialogue: bool = True,
+):
     """Export session to Obsidian vault."""
     config = load_config()
     obsidian_path = Path(config.get("obsidian_path", ""))
@@ -159,8 +256,9 @@ def cmd_obsidian(session_id: str, include_research: bool = True,
         return
 
     # Generate content
-    content = generate_obsidian_content(session_id, include_research,
-                                         include_challenges, include_dialogue)
+    content = generate_obsidian_content(
+        session_id, include_research, include_challenges, include_dialogue
+    )
 
     if not content:
         print("Error generating content")
@@ -217,10 +315,8 @@ def cmd_json(session_id: str, output_path: str = None):
         "state": state,
         "dialogue": None,
         "research": None,
-        "challenges": {
-            "gemini": None,
-            "gpt": None
-        }
+        "challenges": {"gemini": None, "gpt": None, "grok": None},
+        "synthesis": {"tensions": None, "user_response": None, "evaluation": None},
     }
 
     # Load dialogue
@@ -245,6 +341,23 @@ def cmd_json(session_id: str, output_path: str = None):
     if gpt_file.exists():
         with open(gpt_file, "r", encoding="utf-8") as f:
             export_data["challenges"]["gpt"] = json.load(f)
+
+    grok_file = session_path / "challenges" / "grok.json"
+    if grok_file.exists():
+        with open(grok_file, "r", encoding="utf-8") as f:
+            export_data["challenges"]["grok"] = json.load(f)
+
+    # Load synthesis data
+    synthesis_dir = session_path / "synthesis"
+    for key, fname in [
+        ("tensions", "tensions.json"),
+        ("user_response", "user_response.json"),
+        ("evaluation", "evaluation.json"),
+    ]:
+        fpath = synthesis_dir / fname
+        if fpath.exists():
+            with open(fpath, "r", encoding="utf-8") as f:
+                export_data["synthesis"][key] = json.load(f)
 
     if not output_path:
         output_path = session_path / "export.json"

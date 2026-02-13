@@ -1,0 +1,266 @@
+Q4-2025:
+  ticker: GOOG
+  quarter: Q4-2025
+  report_date: 2026-02
+  source: 方岚
+  metrics:
+    revenue_yoy:
+      value: 14%
+      source_page: 6
+      confidence: high
+    op_yoy:
+      value: 22%
+      source_page: 6
+      confidence: high
+      note: 加回waymo 21亿员工激励charge前 16%yoy
+    opm:
+      value: null
+      source_page: null
+      confidence: null
+    opm_change:
+      value: +3%
+      source_page: 6
+      confidence: high
+    capex_mn:
+      value: 91500
+      source_page: 15
+      confidence: high
+      note: 25年全年
+    capex_guidance:
+      value: 26年1750-1850亿
+      source_page: 2
+      confidence: high
+    fcf_mn:
+      value: null
+      source_page: null
+      confidence: null
+    buyback_dividend_yield:
+      value: 0.8%
+      source_page: 2
+      confidence: high
+    rd_margin:
+      value: null
+      source_page: null
+      confidence: null
+    employees:
+      value: null
+      source_page: null
+      confidence: null
+    search_rev_yoy:
+      value: 17%
+      source_page: 2
+      confidence: high
+    paid_clicks_yoy:
+      value: 11%
+      source_page: 3
+      confidence: high
+    cpc_yoy:
+      value: -5%
+      source_page: 3
+      confidence: high
+    cloud_rev_mn:
+      value: 17664
+      source_page: 3
+      confidence: high
+    cloud_rev_yoy:
+      value: 48%
+      source_page: 2
+      confidence: high
+    cloud_opm:
+      value: 30%
+      source_page: 2
+      confidence: high
+    backlog_mn:
+      value: 242800
+      source_page: 15
+      confidence: high
+    cloud_customers:
+      value: 新客户翻倍（较1Q）；10亿以上订单量超过前三年总和；存量客户commitment 30%增长产品线
+      source_page: 14
+      confidence: high
+    youtube_ads_yoy:
+      value: 9%
+      source_page: 6
+      confidence: high
+    youtube_total_rev:
+      value: YouTube收入2025全年超600亿(400亿ads+200亿订阅）
+      source_page: 12
+      confidence: high
+    subs_mn:
+      value: 325
+      source_page: 13
+      confidence: high
+    gemini_mau:
+      value: gemini APP MAU 7.5亿
+      source_page: 5
+      confidence: high
+    gemini_tokens:
+      value: Gemini 3.5pro处理tokens是2.5pro的3x daily
+      source_page: 5
+      confidence: high
+    ai_overview_stat:
+      value: null
+      source_page: null
+      confidence: null
+    ai_search_impact:
+      value: AI 驱动Search saw more usage than ever before
+      source_page: 7
+      confidence: high
+    other_bets_loss_mn:
+      value: null
+      source_page: null
+      confidence: null
+    waymo_stat:
+      value: 40万 rides/周；截至12月累计trips 20mn。拓展区域：两周前6th城市迈阿密；实现机场及高速服务覆盖。
+      source_page: 5
+      confidence: high
+    mgmt_guidance_tone:
+      value: null
+      source_page: null
+      confidence: null
+    key_risk:
+      value: null
+      source_page: null
+      confidence: null
+    valuation_summary:
+      value: 26年OP *15%税率对应30倍PE（考虑权益收益的净利润对应28倍）
+      source_page: 2
+      confidence: high
+    competition_note:
+      value: 广告大盘也在加速增长，google整体缓慢掉份额
+      source_page: 4
+      confidence: high
+Q3-2025:
+  ticker: GOOG
+  quarter: Q3-2025
+  report_date: 2025-10
+  source: 方岚
+  metrics:
+    revenue_yoy:
+      value: 14%
+      source_page: 6
+      confidence: high
+    op_yoy:
+      value: 11%
+      source_page: 6
+      confidence: high
+      note: 加回欧盟罚款后22%yoy
+    opm:
+      value: null
+      source_page: null
+      confidence: high
+    opm_change:
+      value: 同比+3%
+      source_page: 6
+      confidence: high
+    capex_mn:
+      value: 92000
+      source_page: 15
+      confidence: high
+      note: 上调全年至920亿
+    capex_guidance:
+      value: 预计26年大幅增长
+      source_page: 5
+      confidence: high
+    fcf_mn:
+      value: null
+      source_page: null
+      confidence: high
+    buyback_dividend_yield:
+      value: 2.6%
+      source_page: 2
+      confidence: high
+    rd_margin:
+      value: null
+      source_page: null
+      confidence: high
+    employees:
+      value: null
+      source_page: null
+      confidence: high
+    search_rev_yoy:
+      value: 15%
+      source_page: 6
+      confidence: high
+    paid_clicks_yoy:
+      value: 7%
+      source_page: 3
+      confidence: high
+    cpc_yoy:
+      value: null
+      source_page: null
+      confidence: high
+    cloud_rev_mn:
+      value: null
+      source_page: null
+      confidence: high
+    cloud_rev_yoy:
+      value: 34%
+      source_page: 3
+      confidence: high
+    cloud_opm:
+      value: 24%
+      source_page: 3
+      confidence: high
+    backlog_mn:
+      value: null
+      source_page: null
+      confidence: high
+    cloud_customers:
+      value: GCP 新客户34%yoy；10亿以上订单量YTD超过前两年的总和；超过70%的现有云客户都在使用AI产品
+      source_page: 5
+      confidence: high
+    youtube_ads_yoy:
+      value: 15%
+      source_page: 6
+      confidence: high
+    youtube_total_rev:
+      value: 600亿不到
+      source_page: 26
+      confidence: high
+    subs_mn:
+      value: 300
+      source_page: 5
+      confidence: high
+      note: 付费订阅超突破3亿
+    gemini_mau:
+      value: 6.5亿MAU，query3x比2Q
+      source_page: 5
+      confidence: high
+    gemini_tokens:
+      value: process seven billion tokens per minute(10T/day, via direct API use by
+        our customers
+      source_page: 5
+      confidence: high
+    ai_overview_stat:
+      value: AI Overviews（提升搜索量，尤其年轻人；拓展ads覆盖） and AI Mode（75mn DAU；US推出来周度持续增长，query季度翻倍
+      source_page: 5
+      confidence: high
+    ai_search_impact:
+      value: AI驱动query加速，AIO货币化水平一样
+      source_page: 3
+      confidence: high
+    other_bets_loss_mn:
+      value: null
+      source_page: null
+      confidence: high
+    waymo_stat:
+      value: null
+      source_page: null
+      confidence: high
+    mgmt_guidance_tone:
+      value: null
+      source_page: null
+      confidence: high
+    key_risk:
+      value: 广告份额缓慢掉份额
+      source_page: 4
+      confidence: high
+    valuation_summary:
+      value: 25年净利润1300亿，26倍PE
+      source_page: 2
+      confidence: high
+    competition_note:
+      value: 海外AI 搜索当前三个主要玩家，在搜索领域有优势，但维持搜索份额和线上广告份额目前判断难度大
+      source_page: 2
+      confidence: high

@@ -1,9 +1,1 @@
-# Substack Subscriptions — add your feeds here
-# Format: name: URL
 feeds: []
-# Example:
-# feeds:
-#   - name: "Doomberg"
-#     url: "https://doomberg.substack.com/feed"
-#   - name: "Kyla Scanlon"
-#     url: "https://kylascanlon.substack.com/feed"

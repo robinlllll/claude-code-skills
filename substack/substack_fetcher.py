@@ -550,10 +550,26 @@ def add_feed(url: str, config_path: Path | None = None) -> None:
             print(f"[INFO] Feed already exists: {author_name} ({feed_url})")
             return
 
+    # Verify feed is reachable before adding
+    print(f"[VERIFY] Checking feed reachability: {feed_url}")
+    try:
+        import fastfeedparser
+
+        result = fastfeedparser.parse(feed_url)
+        entries = result.get("entries", [])
+        if not entries:
+            print("  [WARN] Feed is reachable but returned 0 entries. Adding anyway.")
+        else:
+            print(f"  [OK] Feed reachable — {len(entries)} articles available.")
+    except Exception as e:
+        print(f"  [WARN] Feed verification failed: {e}")
+        print("  Adding anyway — you can remove with 'remove' if the URL is wrong.")
+
     config["feeds"].append(
         {
             "name": author_name,
             "url": feed_url,
+            "added_at": date.today().isoformat(),
         }
     )
     _save_config(config, config_path)
@@ -579,10 +595,145 @@ def list_feeds(config_path: Path | None = None) -> list:
     print(f"\nSubstack Subscriptions ({len(feeds)} feeds):")
     print("-" * 50)
     for i, feed in enumerate(feeds, 1):
-        print(f"  {i}. {feed.get('name', 'Unknown')} — {feed.get('url', 'N/A')}")
+        added = feed.get("added_at", "")
+        suffix = f"  (added {added})" if added else ""
+        print(
+            f"  {i}. {feed.get('name', 'Unknown')} — {feed.get('url', 'N/A')}{suffix}"
+        )
     print()
 
     return feeds
+
+
+def feed_status(config_path: Path | None = None) -> dict:
+    """Show feed health dashboard: article counts, last sync, reachability.
+
+    Args:
+        config_path: Optional path to feeds YAML config.
+
+    Returns:
+        Dict with per-feed status info.
+    """
+    from shared.frontmatter_utils import get_db as get_ingestion_db
+
+    config = _load_config(config_path)
+    feeds = config.get("feeds", [])
+
+    if not feeds:
+        print("[INFO] No feeds configured.")
+        return {"feeds": []}
+
+    conn = get_ingestion_db()
+    results = []
+
+    print()
+    print("=" * 72)
+    print("SUBSTACK FEED STATUS")
+    print("=" * 72)
+    print(f"  {'#':<3} {'Name':<20} {'Articles':<10} {'Last Sync':<12} {'Reachable'}")
+    print("  " + "-" * 68)
+
+    for i, feed_info in enumerate(feeds, 1):
+        name = feed_info.get("name", "Unknown")
+        feed_url = feed_info.get("url", "")
+        added_at = feed_info.get("added_at", "")
+
+        # Count articles in ingestion_state for this feed's URL hash prefix
+        article_count = 0
+        last_sync = ""
+        try:
+            # Query by obsidian_path containing the feed name
+            safe_name = safe_filename(name) if name else ""
+            rows = conn.execute(
+                "SELECT COUNT(*), MAX(ingested_at) FROM ingestion_state "
+                "WHERE source_platform = 'substack' AND obsidian_path LIKE ?",
+                (f"%{safe_name}%",),
+            ).fetchone()
+            article_count = rows[0] or 0
+            last_sync = (rows[1] or "")[:10]  # Just date portion
+        except Exception:
+            pass
+
+        # Check RSS reachability
+        reachable = "?"
+        try:
+            import fastfeedparser
+
+            result = fastfeedparser.parse(feed_url)
+            entries = result.get("entries", [])
+            reachable = f"OK ({len(entries)} in feed)"
+        except Exception as e:
+            reachable = f"FAIL: {str(e)[:30]}"
+
+        status = {
+            "name": name,
+            "url": feed_url,
+            "article_count": article_count,
+            "last_sync": last_sync,
+            "reachable": reachable,
+            "added_at": added_at,
+        }
+        results.append(status)
+
+        print(
+            f"  {i:<3} {name:<20} {article_count:<10} {last_sync or 'never':<12} {reachable}"
+        )
+
+    conn.close()
+
+    print("=" * 72)
+    total = sum(r["article_count"] for r in results)
+    print(f"  Total articles: {total}")
+    print("=" * 72)
+
+    return {"feeds": results, "total_articles": total}
+
+
+def remove_feed(name_or_index: str, config_path: Path | None = None) -> bool:
+    """Remove a feed by name or 1-based index.
+
+    Args:
+        name_or_index: Feed name (substring match) or 1-based index number.
+        config_path: Optional path to feeds YAML config.
+
+    Returns:
+        True if a feed was removed, False otherwise.
+    """
+    config = _load_config(config_path)
+    feeds = config.get("feeds", [])
+
+    if not feeds:
+        print("[INFO] No feeds to remove.")
+        return False
+
+    # Try as index first
+    try:
+        idx = int(name_or_index) - 1
+        if 0 <= idx < len(feeds):
+            removed = feeds.pop(idx)
+            _save_config(config, config_path)
+            print(f"[REMOVED] {removed.get('name', '?')} ({removed.get('url', '')})")
+            return True
+        else:
+            print(f"[ERROR] Index {name_or_index} out of range (1-{len(feeds)})")
+            return False
+    except ValueError:
+        pass
+
+    # Try as name (substring, case-insensitive)
+    target = name_or_index.lower()
+    for i, feed in enumerate(feeds):
+        if (
+            target in feed.get("name", "").lower()
+            or target in feed.get("url", "").lower()
+        ):
+            removed = feeds.pop(i)
+            _save_config(config, config_path)
+            print(f"[REMOVED] {removed.get('name', '?')} ({removed.get('url', '')})")
+            return True
+
+    print(f"[ERROR] No feed matching '{name_or_index}'")
+    return False
 
 
 # ── CLI Entry Point ──────────────────────────────────────────
@@ -597,6 +748,9 @@ Examples:
   python substack_fetcher.py sync
   python substack_fetcher.py add https://doomberg.substack.com
   python substack_fetcher.py list
+  python substack_fetcher.py status
+  python substack_fetcher.py remove 1
+  python substack_fetcher.py remove doomberg
         """,
     )
     subparsers = parser.add_subparsers(dest="command", help="Command to run")
@@ -617,6 +771,25 @@ Examples:
     # list
     list_parser = subparsers.add_parser("list", help="List all subscriptions")
     list_parser.add_argument(
+        "--config", type=Path, default=None, help="Path to feeds YAML config"
+    )
+
+    # status
+    status_parser = subparsers.add_parser(
+        "status", help="Feed health dashboard (counts, last sync, reachability)"
+    )
+    status_parser.add_argument(
+        "--config", type=Path, default=None, help="Path to feeds YAML config"
+    )
+
+    # remove
+    remove_parser = subparsers.add_parser(
+        "remove", help="Remove a feed by name or index number"
+    )
+    remove_parser.add_argument(
+        "target", help="Feed name (substring) or 1-based index from 'list'"
+    )
+    remove_parser.add_argument(
         "--config", type=Path, default=None, help="Path to feeds YAML config"
     )
 
@@ -647,6 +820,14 @@ Examples:
 
     elif args.command == "list":
         list_feeds(config_path=args.config)
+
+    elif args.command == "status":
+        feed_status(config_path=args.config)
+
+    elif args.command == "remove":
+        removed = remove_feed(args.target, config_path=args.config)
+        if removed:
+            list_feeds(config_path=args.config)
 
 
 if __name__ == "__main__":

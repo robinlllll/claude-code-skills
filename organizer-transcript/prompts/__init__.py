@@ -18,11 +18,18 @@ Usage:
 from .prompt_gemini import get_gemini_prompt
 from .prompt_claude import get_claude_prompt
 from .prompt_default import get_default_prompt
+from .prompt_peer import get_peer_prompt
 
 
-def get_prompt_for_provider(provider: str, company_name: str, ticker: str,
-                            curr: str, prev: str, quarters_comparison: str,
-                            company_specific_notes: str = "") -> str:
+def get_prompt_for_provider(
+    provider: str,
+    company_name: str,
+    ticker: str,
+    curr: str,
+    prev: str,
+    quarters_comparison: str,
+    company_specific_notes: str = "",
+) -> str:
     """
     Get the appropriate prompt template based on the AI provider.
 
@@ -47,7 +54,7 @@ def get_prompt_for_provider(provider: str, company_name: str, ticker: str,
             curr=curr,
             prev=prev,
             quarters_comparison=quarters_comparison,
-            company_specific_notes=company_specific_notes
+            company_specific_notes=company_specific_notes,
         )
     elif provider == "claude":
         return get_claude_prompt(
@@ -56,7 +63,7 @@ def get_prompt_for_provider(provider: str, company_name: str, ticker: str,
             curr=curr,
             prev=prev,
             quarters_comparison=quarters_comparison,
-            company_specific_notes=company_specific_notes
+            company_specific_notes=company_specific_notes,
         )
     else:
         # Default prompt for ChatGPT and any other provider
@@ -66,5 +73,5 @@ def get_prompt_for_provider(provider: str, company_name: str, ticker: str,
             curr=curr,
             prev=prev,
             quarters_comparison=quarters_comparison,
-            company_specific_notes=company_specific_notes
+            company_specific_notes=company_specific_notes,
         )

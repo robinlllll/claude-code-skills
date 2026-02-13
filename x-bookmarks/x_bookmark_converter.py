@@ -4,7 +4,8 @@ Imports JSON exports from the twitter-web-exporter Chrome extension
 and creates Obsidian notes with standardized frontmatter.
 
 Usage:
-    python x_bookmark_converter.py import bookmarks.json
+    python x_bookmark_converter.py import [bookmarks.json]   # auto-finds in ~/Downloads if omitted
+    python x_bookmark_converter.py save <tweet_url>           # save a single tweet by URL
     python x_bookmark_converter.py stats
 """
 
@@ -38,6 +39,58 @@ NOTE_TYPE = "x"
 
 # Twitter date format: "Wed Oct 10 20:19:24 +0000 2025"
 TWITTER_DATE_FORMAT = "%a %b %d %H:%M:%S %z %Y"
+
+DOWNLOADS_DIR = Path.home() / "Downloads"
+
+
+# ── Auto-Find Export ───────────────────────────────────────
+
+
+def find_latest_export() -> Optional[Path]:
+    """Scan ~/Downloads for the newest twitter bookmark export JSON.
+
+    Search patterns (in priority order):
+    1. twitter-Bookmarks-*.json  (exact twitter-web-exporter pattern)
+    2. twitter-*.json
+    3. bookmarks*.json
+    4. *bookmark*.json (case-insensitive fallback)
+
+    Returns:
+        Path to the newest matching file, or None if not found.
+    """
+    if not DOWNLOADS_DIR.exists():
+        return None
+
+    candidates = []
+    seen = set()
+
+    for pattern in [
+        "twitter-Bookmarks-*.json",
+        "twitter-*.json",
+        "bookmarks*.json",
+    ]:
+        for p in DOWNLOADS_DIR.glob(pattern):
+            if p.is_file() and p not in seen:
+                candidates.append(p)
+                seen.add(p)
+
+    # Case-insensitive fallback
+    for p in DOWNLOADS_DIR.iterdir():
+        if (
+            p.is_file()
+            and p.suffix.lower() == ".json"
+            and "bookmark" in p.name.lower()
+            and p not in seen
+        ):
+            candidates.append(p)
+            seen.add(p)
+
+    if not candidates:
+        return None
+
+    # Sort by modification time, newest first
+    candidates.sort(key=lambda p: p.stat().st_mtime, reverse=True)
+    return candidates[0]
 
 
 # ── Parsing ─────────────────────────────────────────────────
@@ -455,6 +508,132 @@ def format_thread_markdown(thread: list[dict]) -> str:
     return "\n".join(lines)
 
 
+# ── Single Tweet Fetch (yt-dlp) ────────────────────────────
+
+
+def fetch_single_tweet(url: str) -> Optional[dict]:
+    """Fetch a single tweet's metadata via yt-dlp and normalize to _extract_tweet format.
+
+    Args:
+        url: Tweet URL (https://x.com/user/status/123 or https://twitter.com/...)
+
+    Returns:
+        Normalized tweet dict compatible with _extract_tweet output, or None on failure.
+    """
+    try:
+        result = subprocess.run(
+            [
+                "yt-dlp",
+                "-j",
+                "--skip-download",
+                "--cookies-from-browser",
+                "chrome",
+                url,
+            ],
+            capture_output=True,
+            timeout=30,
+        )
+        if result.returncode != 0:
+            stderr = result.stderr.decode("utf-8", errors="replace").strip()
+            print(f"ERROR: yt-dlp failed: {stderr[:200]}")
+            return None
+
+        raw = json.loads(result.stdout.decode("utf-8", errors="replace"))
+    except subprocess.TimeoutExpired:
+        print("ERROR: yt-dlp timed out (30s)")
+        return None
+    except json.JSONDecodeError as e:
+        print(f"ERROR: Could not parse yt-dlp output: {e}")
+        return None
+    except FileNotFoundError:
+        print("ERROR: yt-dlp not found. Install with: pip install yt-dlp")
+        return None
+
+    # Normalize yt-dlp output to match _extract_tweet format
+    tweet_id = str(raw.get("id") or "")
+    # yt-dlp id may include the extractor prefix — strip it
+    if "_" in tweet_id:
+        tweet_id = tweet_id.split("_")[-1]
+    if not tweet_id:
+        # Try extracting from URL
+        m = re.search(r"/status/(\d+)", url)
+        if m:
+            tweet_id = m.group(1)
+
+    if not tweet_id:
+        print("ERROR: Could not determine tweet ID")
+        return None
+
+    # Extract uploader info
+    screen_name = raw.get("uploader_id") or raw.get("uploader") or ""
+    # yt-dlp sometimes prefixes with @
+    screen_name = screen_name.lstrip("@")
+    display_name = raw.get("uploader") or raw.get("channel") or screen_name
+
+    # Parse upload date (YYYYMMDD format from yt-dlp)
+    created_at = None
+    upload_date = raw.get("upload_date") or raw.get("timestamp")
+    if isinstance(upload_date, str) and len(upload_date) == 8:
+        try:
+            created_at = datetime.strptime(upload_date, "%Y%m%d")
+        except ValueError:
+            pass
+    elif isinstance(upload_date, (int, float)):
+        created_at = datetime.fromtimestamp(upload_date)
+
+    # Get text content
+    full_text = raw.get("description") or raw.get("title") or ""
+
+    # Extract engagement
+    favorite_count = raw.get("like_count") or 0
+    retweet_count = raw.get("repost_count") or raw.get("retweet_count") or 0
+
+    return {
+        "id": tweet_id,
+        "full_text": full_text,
+        "screen_name": screen_name,
+        "display_name": display_name,
+        "created_at": created_at,
+        "urls": [],
+        "media": [],
+        "favorite_count": int(favorite_count) if favorite_count else 0,
+        "retweet_count": int(retweet_count) if retweet_count else 0,
+        "in_reply_to_status_id": "",
+        "in_reply_to_user": "",
+        "quoted_tweet": None,
+    }
+
+
+def save_single_tweet(url: str) -> Optional[Path]:
+    """Fetch a single tweet by URL and save to Obsidian.
+
+    Args:
+        url: Tweet URL (https://x.com/user/status/123)
+
+    Returns:
+        Path to saved note, or None if failed/duplicate.
+    """
+    print(f"Fetching tweet: {url}")
+    tweet = fetch_single_tweet(url)
+    if not tweet:
+        print("Failed to fetch tweet.")
+        return None
+
+    print(f"  Author: @{tweet['screen_name']} | ID: {tweet['id']}")
+    preview = _clean_text(tweet.get("full_text", ""))[:60]
+    print(f"  Text: {preview}...")
+
+    # Check for duplicate
+    if is_already_ingested(SOURCE_PLATFORM, tweet["id"]):
+        print("  Skipped: already imported.")
+        return None
+
+    path = save_to_obsidian(tweet)
+    if path:
+        print(f"  Saved: {path}")
+    return path
+
+
 # ── Save to Obsidian ────────────────────────────────────────
 
 
@@ -555,13 +734,45 @@ def save_to_obsidian(item: dict | list[dict]) -> Optional[Path]:
     out_path.write_text(full_content, encoding="utf-8")
 
     # Record ingestion for all tweets in the thread
+    canonical_key = None
     for t in thread:
-        record_ingestion(
+        key = record_ingestion(
             source_platform=SOURCE_PLATFORM,
             stable_id=t["id"],
             obsidian_path=str(out_path.relative_to(VAULT_DIR)),
             metadata=json.dumps({"screen_name": t["screen_name"]}, ensure_ascii=False),
         )
+        if canonical_key is None:
+            canonical_key = key
+
+    # Framework tagging (graceful — skip if unavailable)
+    framework_sections = []
+    try:
+        from shared.framework_tagger import tag_content
+
+        framework_sections = tag_content(all_text, mode="keyword")
+    except Exception:
+        pass
+
+    # Pipeline tracking (graceful — skip if unavailable)
+    try:
+        from shared.task_manager import record_pipeline_entry
+
+        record_pipeline_entry(
+            canonical_key=canonical_key or f"x_{tweet_id}",
+            item_type="x-bookmark",
+            item_title=_clean_text(primary.get("full_text", ""))[:80],
+            source_platform="x",
+            obsidian_path=str(out_path),
+            note_id=f"x_{tweet_id}",
+            has_frontmatter=True,
+            has_tickers=bool(tickers),
+            has_framework_tags=bool(framework_sections),
+            tickers_found=tickers,
+            framework_sections=framework_sections,
+        )
+    except Exception:
+        pass
 
     return out_path
 
@@ -748,7 +959,9 @@ if __name__ == "__main__":
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
-  python x_bookmark_converter.py import bookmarks.json
+  python x_bookmark_converter.py import                         # auto-find in ~/Downloads
+  python x_bookmark_converter.py import bookmarks.json          # explicit path
+  python x_bookmark_converter.py save https://x.com/u/status/1  # single tweet
   python x_bookmark_converter.py stats
         """,
     )
@@ -756,10 +969,21 @@ Examples:
 
     # import subcommand
     import_parser = subparsers.add_parser(
-        "import", help="Import bookmarks from JSON file"
+        "import",
+        help="Import bookmarks from JSON file (auto-finds in ~/Downloads if omitted)",
     )
     import_parser.add_argument(
-        "json_file", type=str, help="Path to the exported JSON file"
+        "json_file",
+        nargs="?",
+        default=None,
+        type=str,
+        help="Path to exported JSON file (optional — auto-detects in ~/Downloads)",
+    )
+
+    # save subcommand (single tweet)
+    save_parser = subparsers.add_parser("save", help="Save a single tweet by URL")
+    save_parser.add_argument(
+        "tweet_url", type=str, help="Tweet URL (https://x.com/user/status/123)"
     )
 
     # stats subcommand
@@ -768,11 +992,28 @@ Examples:
     args = parser.parse_args()
 
     if args.command == "import":
-        json_path = Path(args.json_file)
-        if not json_path.is_absolute():
-            json_path = Path.cwd() / json_path
+        if args.json_file:
+            json_path = Path(args.json_file)
+            if not json_path.is_absolute():
+                json_path = Path.cwd() / json_path
+        else:
+            # Auto-find mode
+            json_path = find_latest_export()
+            if not json_path:
+                print("ERROR: No bookmark export found in ~/Downloads")
+                print(
+                    "  Looked for: twitter-Bookmarks-*.json, twitter-*.json, "
+                    "bookmarks*.json, *bookmark*.json"
+                )
+                print(f"  Directory: {DOWNLOADS_DIR}")
+                sys.exit(1)
+            size_kb = json_path.stat().st_size / 1024
+            print(f"Auto-found: {json_path.name} ({size_kb:.1f} KB)")
         result = import_bookmarks(json_path)
         sys.exit(0 if result["errors"] == 0 else 1)
+    elif args.command == "save":
+        path = save_single_tweet(args.tweet_url)
+        sys.exit(0 if path else 1)
     elif args.command == "stats":
         show_stats()
     else:

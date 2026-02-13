@@ -1,0 +1,32 @@
+segment,key,label,type,required,notes
+financials,revenue_yoy,总收入 YoY,percent,yes,
+financials,op_yoy,OP YoY,percent,yes,
+financials,opm,OPM,percent,no,可能只给变化值
+financials,opm_change,OPM 同比变化,text,no,如+3pp
+financials,capex_mn,CapEx (mn),number,yes,全年或单季
+financials,capex_guidance,CapEx 指引,text,no,下一年度
+financials,fcf_mn,FCF (mn),number,no,
+financials,buyback_dividend_yield,回购+分红收益率,percent,no,
+financials,rd_margin,R&D/Revenue,percent,no,
+financials,employees,员工数,number,no,
+search,search_rev_yoy,Search 收入 YoY,percent,yes,
+search,paid_clicks_yoy,Paid Clicks YoY,percent,yes,
+search,cpc_yoy,CPC YoY,percent,no,
+cloud,cloud_rev_mn,Cloud 收入 (mn),number,yes,
+cloud,cloud_rev_yoy,Cloud 收入 YoY,percent,yes,
+cloud,cloud_opm,Cloud OPM,percent,yes,
+cloud,backlog_mn,Backlog (mn),number,no,
+cloud,cloud_customers,Cloud 客户关键数据,text,no,新客户/大单/渗透率
+youtube,youtube_ads_yoy,YouTube Ads YoY,percent,no,
+youtube,youtube_total_rev,YouTube 总收入,text,no,带单位说明
+youtube,subs_mn,总订阅数 (mn),number,no,google one+premium+TV
+ai,gemini_mau,Gemini APP MAU,text,no,带单位
+ai,gemini_tokens,Gemini Tokens 处理量,text,no,带单位
+ai,ai_overview_stat,AI Overviews/AI Mode 关键指标,text,no,自由文本
+ai,ai_search_impact,AI 对 Search 的影响,text,no,query增长/货币化变化
+other,other_bets_loss_mn,Other Bets 亏损 (mn),number,no,
+other,waymo_stat,Waymo 关键进展,text,no,自由文本
+qualitative,mgmt_guidance_tone,管理层指引语气,text,no,一句话概括
+qualitative,key_risk,卖方提到的关键风险/担忧,text,no,一句话概括
+qualitative,valuation_summary,估值摘要,text,no,卖方给的估值框架
+qualitative,competition_note,竞争格局变化,text,no,份额/新进入者

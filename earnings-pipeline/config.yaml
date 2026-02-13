@@ -1,0 +1,37 @@
+models:
+  gemini:
+    model_id: "gemini-3-pro-preview"
+    thinking_level: "HIGH"
+    max_retries: 3
+    backoff_schedule: [10, 30, 60]
+
+paths:
+  transcripts_root: "~/Downloads/Earnings Transcripts"
+  vault_root: "~/Documents/Obsidian Vault"
+  vault_earnings: "研究/财报分析"
+  dashboard_folder: "研究/财报分析/_Pipeline Dashboards"
+  runs_dir: "runs"  # Relative to skill dir
+
+pipeline:
+  max_concurrent: 5
+  min_tickers: 2
+
+validation:
+  min_total_chars: 5000
+  required_section_keywords:    # Fuzzy match — any keyword hit counts
+    - ["综合评估", "投资启示"]
+    - ["业绩概览", "Performance"]
+    - ["核心", "驱动", "Segment"]
+    - ["管理层", "叙事", "Narrative"]
+    - ["Q&A", "透视", "分析师"]
+    - ["主题演变", "Thematic"]
+  min_citation_density: 0.02
+  min_unique_pages_cited: 3     # Must cite at least 3 distinct page numbers
+  min_qa_questions: 5
+
+quarters:
+  prev_map:
+    Q1: [Q4, -1]   # Q1 -> prev is Q4 of previous year
+    Q2: [Q1, 0]
+    Q3: [Q2, 0]
+    Q4: [Q3, 0]

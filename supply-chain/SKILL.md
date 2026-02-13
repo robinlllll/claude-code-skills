@@ -43,7 +43,7 @@ Process all new (unprocessed) earnings transcripts.
 1. Scans `Downloads/Earnings Transcripts/` for all PDF files
 2. Skips already-processed transcripts
 3. Extracts text with pdfplumber, chunks by speaker turn
-4. Calls Gemini 2.0 Flash to extract company mentions
+4. Calls Gemini to extract company mentions
 5. Resolves entities via shared dictionary
 6. Stores in SQLite with verbatim quotes
 
@@ -81,7 +81,7 @@ Downloads/Earnings Transcripts/
     mention_extractor.py
     ├── pdfplumber (text extraction)
     ├── chunk_by_speaker (speaker turns, ~2000 tokens)
-    ├── Gemini 2.0 Flash (mention extraction)
+    ├── Gemini (mention extraction)
     └── entity_resolver (dictionary lookup)
               │
               ▼
@@ -90,7 +90,7 @@ Downloads/Earnings Transcripts/
               │
               ▼
     supply_chain_obsidian.py
-    └── Obsidian Vault/Supply Chain/{TICKER}_mentions.md
+    └── Obsidian Vault/研究/供应链/{TICKER}_mentions.md
 ```
 
 ## Dependencies
@@ -119,4 +119,4 @@ Downloads/Earnings Transcripts/
 ## Output
 
 - **Database:** `C:\Users\thisi\.claude\skills\supply-chain\data\supply_chain.db`
-- **Obsidian notes:** `C:\Users\thisi\Documents\Obsidian Vault\Supply Chain\{TICKER}_mentions.md`
+- **Obsidian notes:** `C:\Users\thisi\Documents\Obsidian Vault\研究\供应链\{TICKER}_mentions.md`

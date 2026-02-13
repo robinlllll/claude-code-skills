@@ -34,11 +34,15 @@ class GPTClient:
         self,
         api_key: Optional[str] = None,
         model: str = "gpt-5.2-chat-latest",
+        base_url: Optional[str] = None,
     ):
         from openai import OpenAI
 
         self.api_key = api_key or os.getenv("OPENAI_API_KEY")
-        self.client = OpenAI(api_key=self.api_key)
+        kwargs = {"api_key": self.api_key}
+        if base_url:
+            kwargs["base_url"] = base_url
+        self.client = OpenAI(**kwargs)
         self.model = model
 
     def health_check(self) -> bool:
@@ -47,7 +51,7 @@ class GPTClient:
             r = self.client.chat.completions.create(
                 model=self.model,
                 messages=[{"role": "user", "content": "ping"}],
-                max_tokens=5,
+                max_completion_tokens=5,
             )
             return bool(r.choices[0].message.content)
         except Exception:

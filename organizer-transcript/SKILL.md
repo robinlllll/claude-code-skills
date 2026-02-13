@@ -21,6 +21,12 @@ Organizes earnings call transcript PDFs from Downloads into structured company f
 - User wants to analyze earnings with Claude or Gemini
 - User says "analyze [TICKER]" or "transcript analysis"
 
+## When to Use This Skill (Peer Comparison)
+
+- User wants to compare multiple companies' earnings: "比较 GOOG、META、AMZN"
+- User mentions "peer comparison" or "同行对比"
+- User says "compare [TICKER1] and [TICKER2]"
+
 ## What It Does
 
 ### 1. Organizer
@@ -48,6 +54,32 @@ For Claude Opus 4.5 analysis, use this skill directly:
 ```
 Claude Code will read the PDFs and provide analysis - no API key needed!
 
+### 4. Peer Comparison (Cross-Company Analysis)
+Compare 2-4 companies' earnings in the same quarter:
+```
+/organizer-transcript peer GOOG META AMZN Q4 2025
+```
+Or with custom focus:
+```
+/organizer-transcript peer HOOD SOFI Q4 2025 focus:crypto revenue mix
+```
+
+**Peer comparison workflow:**
+1. Parse tickers and quarter from user input
+2. Find each company's transcript PDF in `Downloads/Earnings Transcripts/`
+3. Read all PDFs (max 4 companies due to context limits)
+4. Apply peer comparison prompt template (`prompts/prompt_peer.py`)
+5. Generate 6-dimension cross-company analysis
+6. Auto-save to Obsidian: `研究/财报分析/_Peer Comparisons/`
+
+**6 comparison dimensions:**
+1. Competitive Landscape — who's winning market share
+2. Growth Quality — organic vs acquired, sustainability
+3. Profitability & Capital Efficiency — margins, FCF, ROIC
+4. Management Narrative Divergence — same topic, different answers
+5. Analyst Focus Cross-Check — shared questions, different quality
+6. Investment Implications — "buy only one" thesis, pair trades
+
 ## Key Files
 
 | File | Purpose |
@@ -57,6 +89,7 @@ Claude Code will read the PDFs and provide analysis - no API key needed!
 | `browser/indexer.py` | Transcript indexer |
 | `browser/obsidian.py` | Obsidian vault writer |
 | `browser/ai_provider.py` | AI provider abstraction |
+| `prompts/prompt_peer.py` | Peer comparison prompt template |
 | `browser/data/` | Notes, history, recent additions |
 | `browser/.env` | API keys (Gemini configured) |
 
@@ -112,9 +145,11 @@ When user asks to analyze a company:
 Analyses are saved to:
 ```
 C:\Users\thisi\Documents\Obsidian Vault\研究\财报分析\
-└── {TICKER}/
-    ├── 2026-02-04 1630 TICKER Q2 2026 vs Q4 2025 Analysis.md
-    └── _TICKER Notes.md
+├── {TICKER}/
+│   ├── 2026-02-04 1630 TICKER Q2 2026 vs Q4 2025 Analysis.md
+│   └── _TICKER Notes.md
+└── _Peer Comparisons/
+    └── 2026-02-11 1630 GOOG vs META vs AMZN Q4 2025 Peer Analysis.md
 ```
 
 Each analysis file includes:
