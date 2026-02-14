@@ -15,7 +15,9 @@ Claude = pipe (call API, pass context, run scripts, display results)
 
 import asyncio
 import json
+import logging
 import sys
+import time
 
 # Fix Windows console encoding
 if sys.platform == "win32":
@@ -24,6 +26,8 @@ import os
 import subprocess
 from pathlib import Path
 from datetime import datetime
+
+logger = logging.getLogger(__name__)
 
 SKILL_DIR = Path(os.environ.get("SKILL_DIR", Path(__file__).parent.parent))
 
@@ -55,15 +59,44 @@ def _get_grok_client(temperature: float = 0.7):
         raise ImportError("openai not installed. Run: pip install openai")
 
 
-def _call_grok_sync(prompt: str, temperature: float = 0.7) -> str:
-    """Synchronous Grok API call. Returns raw response text."""
+def _call_grok_sync(prompt: str, temperature: float = 0.7, max_retries: int = 3) -> str:
+    """Synchronous Grok API call with exponential backoff retry.
+
+    Retries on transient errors (connection, 429, 500/502/503).
+    Does NOT retry on client errors (400, 401, 403).
+    """
+    from openai import APIConnectionError, APIStatusError
+
     client, model, _ = _get_grok_client(temperature)
-    resp = client.chat.completions.create(
-        model=model,
-        messages=[{"role": "user", "content": prompt}],
-        temperature=temperature,
-    )
-    return resp.choices[0].message.content
+    last_exception = None
+
+    for attempt in range(max_retries):
+        try:
+            resp = client.chat.completions.create(
+                model=model,
+                messages=[{"role": "user", "content": prompt}],
+                temperature=temperature,
+            )
+            return resp.choices[0].message.content
+        except APIConnectionError as e:
+            last_exception = e
+            delay = 2 ** attempt  # 1s, 2s, 4s
+            logger.warning("Grok API connection error (attempt %d/%d), retrying in %ds: %s",
+                           attempt + 1, max_retries, delay, e)
+            time.sleep(delay)
+        except APIStatusError as e:
+            if e.status_code in (429, 500, 502, 503):
+                last_exception = e
+                delay = 2 ** attempt
+                logger.warning("Grok API status %d (attempt %d/%d), retrying in %ds: %s",
+                               e.status_code, attempt + 1, max_retries, delay, e)
+                time.sleep(delay)
+            else:
+                # Client errors (400, 401, 403, etc.) — don't retry
+                raise
+
+    # All retries exhausted
+    raise last_exception
 
 
 def _parse_json_response(text: str) -> dict:
@@ -73,8 +106,11 @@ def _parse_json_response(text: str) -> dict:
         end = text.rfind("}") + 1
         if start >= 0 and end > start:
             return json.loads(text[start:end])
-    except json.JSONDecodeError:
-        pass
+    except json.JSONDecodeError as e:
+        logger.warning("JSON parse failed: %s\nRaw response (first 500 chars): %.500s", e, text)
+    else:
+        # No JSON braces found at all
+        logger.warning("No JSON object found in response. Raw response (first 500 chars): %.500s", text)
     return {"raw_response": text}
 
 

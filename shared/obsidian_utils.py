@@ -9,8 +9,11 @@ Usage::
     from shared.obsidian_utils import add_tags, move_note, search_vault
 """
 
+import logging
 import re
 from pathlib import Path
+
+logger = logging.getLogger(__name__)
 
 VAULT_DIR = Path.home() / "Documents" / "Obsidian Vault"
 
@@ -175,6 +178,22 @@ def list_tags(vault_dir: Path = VAULT_DIR) -> dict[str, int]:
 _WIKILINK_RE = re.compile(r"\[\[([^\]|]+)(\|[^\]]+)?\]\]")
 
 
+def _find_notes_by_stem(
+    stem: str, vault_dir: Path, exclude: Path | None = None
+) -> list[Path]:
+    """Find all .md files in the vault whose stem matches the given name.
+
+    Used to detect ambiguity: if len(result) > 1, the stem is ambiguous.
+    """
+    matches = []
+    for md in vault_dir.rglob("*.md"):
+        if md == exclude:
+            continue
+        if md.stem == stem:
+            matches.append(md)
+    return matches
+
+
 def move_note(
     source: str | Path,
     destination: str | Path,
@@ -188,7 +207,8 @@ def move_note(
         vault_dir: Vault root directory
 
     Returns:
-        {"moved": True, "links_updated": int, "files_touched": [...]}
+        {"moved": True, "links_updated": int, "files_touched": [...],
+         "ambiguous_skipped": [...]}
     """
     src = vault_dir / source
     dst = vault_dir / destination
@@ -201,6 +221,27 @@ def move_note(
     old_stem = src.stem
     new_stem = dst.stem
 
+    # Compute vault-relative path without extension for path-qualified link matching
+    # e.g. "research/companies/AAPL" for "research/companies/AAPL.md"
+    old_rel = Path(source).with_suffix("").as_posix()
+
+    # Detect ambiguity: are there other notes with the same stem?
+    other_same_stem = _find_notes_by_stem(old_stem, vault_dir, exclude=src)
+    is_ambiguous = len(other_same_stem) > 0
+
+    if is_ambiguous:
+        others = [str(p.relative_to(vault_dir)) for p in other_same_stem]
+        logger.warning(
+            "Ambiguous stem '%s': source '%s' shares filename with %s. "
+            "Only path-qualified wikilinks (e.g. [[folder/%s]]) will be updated; "
+            "bare [[%s]] links will be skipped to avoid incorrect renames.",
+            old_stem,
+            source,
+            others,
+            old_stem,
+            old_stem,
+        )
+
     # Ensure destination directory exists
     dst.parent.mkdir(parents=True, exist_ok=True)
 
@@ -210,6 +251,7 @@ def move_note(
     # Update wikilinks across vault (only if stem changed)
     files_touched = []
     links_updated = 0
+    ambiguous_skipped: list[str] = []
 
     if old_stem != new_stem:
         for md in vault_dir.rglob("*.md"):
@@ -220,36 +262,86 @@ def move_note(
             except (UnicodeDecodeError, PermissionError):
                 continue
 
+            skipped_in_file = []
             new_content, count = _WIKILINK_RE.subn(
-                lambda m: _replace_link(m, old_stem, new_stem),
+                lambda m: _replace_link(
+                    m, old_stem, new_stem, old_rel, is_ambiguous, skipped_in_file
+                ),
                 content,
             )
+            if skipped_in_file:
+                rel_md = str(md.relative_to(vault_dir))
+                ambiguous_skipped.extend(f"{rel_md}: [[{s}]]" for s in skipped_in_file)
             if count > 0 and new_content != content:
                 md.write_text(new_content, encoding="utf-8")
-                actual = content.count(f"[[{old_stem}")
+                actual = content.count(f"[[{old_stem}") - len(skipped_in_file)
                 if actual > 0:
                     files_touched.append(str(md.relative_to(vault_dir)))
                     links_updated += actual
+
+    if ambiguous_skipped:
+        logger.warning(
+            "Skipped %d ambiguous wikilink(s) during rename of '%s': %s",
+            len(ambiguous_skipped),
+            old_stem,
+            ambiguous_skipped,
+        )
 
     return {
         "moved": True,
         "links_updated": links_updated,
         "files_touched": files_touched,
+        "ambiguous_skipped": ambiguous_skipped,
     }
 
 
-def _replace_link(match: re.Match, old_stem: str, new_stem: str) -> str:
-    """Replace wikilink target if it matches old_stem."""
+def _replace_link(
+    match: re.Match,
+    old_stem: str,
+    new_stem: str,
+    old_rel: str,
+    is_ambiguous: bool,
+    skipped: list[str],
+) -> str:
+    """Replace wikilink target if it matches old_stem, with ambiguity awareness.
+
+    Args:
+        match: Regex match for a wikilink.
+        old_stem: Old filename without extension (e.g. "AAPL").
+        new_stem: New filename without extension.
+        old_rel: Vault-relative path without extension (e.g. "research/AAPL").
+        is_ambiguous: True if other notes share the same stem.
+        skipped: Mutable list; appended with skipped link targets for reporting.
+    """
     target = match.group(1).strip()
     alias = match.group(2) or ""
 
-    # Handle paths in links: [[folder/name]] → just compare name part
-    target_stem = target.rsplit("/", 1)[-1] if "/" in target else target
+    if "/" in target:
+        # Path-qualified link: [[folder/name]] → match against full relative path
+        # Normalize to posix for comparison
+        target_posix = target.replace("\\", "/")
+        if target_posix == old_rel:
+            if alias:
+                return f"[[{new_stem}{alias}]]"
+            return f"[[{new_stem}]]"
+        # Also check if the path suffix matches (Obsidian allows partial paths)
+        if old_rel.endswith("/" + target_posix):
+            if alias:
+                return f"[[{new_stem}{alias}]]"
+            return f"[[{new_stem}]]"
+        return match.group(0)
 
-    if target_stem == old_stem:
+    # Bare link: [[name]] → compare stem only
+    if target == old_stem:
+        if is_ambiguous:
+            # Ambiguous: skip this link to avoid incorrectly renaming
+            # links that may point to a different note with the same stem
+            skipped.append(target)
+            return match.group(0)
         if alias:
             return f"[[{new_stem}{alias}]]"
         return f"[[{new_stem}]]"
+
     return match.group(0)
 
 
@@ -373,6 +465,8 @@ def delete_note(filepath: str | Path, vault_dir: Path = VAULT_DIR) -> dict:
         raise FileNotFoundError(f"Note not found: {filepath}")
 
     stem = path.stem
+    # Vault-relative path without extension for path-qualified link matching
+    note_rel = path.relative_to(vault_dir).with_suffix("").as_posix()
     incoming = []
 
     for md in vault_dir.rglob("*.md"):
@@ -382,8 +476,21 @@ def delete_note(filepath: str | Path, vault_dir: Path = VAULT_DIR) -> dict:
             text = md.read_text(encoding="utf-8")
         except (UnicodeDecodeError, PermissionError):
             continue
-        if f"[[{stem}" in text:
-            incoming.append(str(md.relative_to(vault_dir)))
+        # Quick pre-check: skip files that don't mention the stem at all
+        if f"[[{stem}" not in text and stem not in text:
+            continue
+        # Parse wikilinks properly to check for actual matches
+        for m in _WIKILINK_RE.finditer(text):
+            target = m.group(1).strip()
+            if "/" in target:
+                # Path-qualified link: check against full relative path
+                target_posix = target.replace("\\", "/")
+                if target_posix == note_rel or note_rel.endswith("/" + target_posix):
+                    incoming.append(str(md.relative_to(vault_dir)))
+                    break
+            elif target == stem:
+                incoming.append(str(md.relative_to(vault_dir)))
+                break
 
     if incoming:
         return {"deleted": False, "incoming_links": incoming}

@@ -330,21 +330,21 @@ def _load_session_data(session_id: str) -> tuple:
 
 
 def _get_gemini_client():
-    """Initialize Gemini client (matches existing devil.py pattern)."""
+    """Initialize Gemini client (new google.genai SDK)."""
     try:
-        import google.generativeai as genai
+        from google import genai
 
         config = load_config()
         api_key = config.get("gemini_api_key")
         if not api_key:
             raise ValueError("Gemini API key not configured. Run: config.py set-gemini-key YOUR_KEY")
 
-        genai.configure(api_key=api_key)
+        client = genai.Client(api_key=api_key)
         model_name = config.get("gemini_model", "gemini-3-pro-preview")
-        return genai.GenerativeModel(model_name)
+        return client, model_name
 
     except ImportError:
-        raise ImportError("google-generativeai not installed. Run: pip install google-generativeai")
+        raise ImportError("google-genai not installed. Run: pip install google-genai")
 
 
 def _get_openai_client():
@@ -422,7 +422,7 @@ def _extract_tickers_and_suggest(text: str):
 
 async def _call_gemini_quantitative(topic: str, content: str, dialogue: str) -> dict:
     """Call Gemini with quantitative-focused prompt."""
-    model = _get_gemini_client()
+    client, model_name = _get_gemini_client()
 
     prompt = GEMINI_QUANTITATIVE_PROMPT.format(
         topic=topic,
@@ -430,10 +430,14 @@ async def _call_gemini_quantitative(topic: str, content: str, dialogue: str) -> 
         dialogue=dialogue,
     )
 
-    # Run in executor since google.generativeai is synchronous
+    # Run in executor since google.genai is synchronous
     loop = asyncio.get_event_loop()
-    response = await loop.run_in_executor(None, model.generate_content, prompt)
-    result_text = response.text
+
+    def _call():
+        response = client.models.generate_content(model=model_name, contents=prompt)
+        return response.text
+
+    result_text = await loop.run_in_executor(None, _call)
 
     # Parse JSON
     try:
@@ -524,7 +528,7 @@ async def _call_grok_rebuttal(gemini_output, gpt_output: str, topic: str, conten
 
 async def _call_gemini_rebuttal(gpt_output: str, topic: str, content: str) -> dict:
     """Gemini rebuts GPT's qualitative challenges."""
-    model = _get_gemini_client()
+    client, model_name = _get_gemini_client()
 
     prompt = GEMINI_REBUTTAL_PROMPT.format(
         gpt_output=gpt_output,
@@ -533,8 +537,12 @@ async def _call_gemini_rebuttal(gpt_output: str, topic: str, content: str) -> di
     )
 
     loop = asyncio.get_event_loop()
-    response = await loop.run_in_executor(None, model.generate_content, prompt)
-    result_text = response.text
+
+    def _call():
+        response = client.models.generate_content(model=model_name, contents=prompt)
+        return response.text
+
+    result_text = await loop.run_in_executor(None, _call)
 
     try:
         start = result_text.find("{")

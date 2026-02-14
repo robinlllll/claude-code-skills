@@ -19,6 +19,7 @@ from typing import Optional
 sys.stdout.reconfigure(encoding='utf-8', errors='replace')
 
 from google import genai
+from google.genai import types as genai_types
 
 
 @dataclass
@@ -37,13 +38,16 @@ class GeminiClient:
         self,
         api_key: Optional[str] = None,
         model: str = "gemini-2.5-flash",
+        timeout: Optional[int] = None,
     ):
         # Official SDK reads from GEMINI_API_KEY env var by default
         self.api_key = api_key or os.getenv("GEMINI_API_KEY")
+        client_kwargs = {}
         if self.api_key:
-            self.client = genai.Client(api_key=self.api_key)
-        else:
-            self.client = genai.Client()
+            client_kwargs["api_key"] = self.api_key
+        if timeout:
+            client_kwargs["http_options"] = genai_types.HttpOptions(timeout=timeout)
+        self.client = genai.Client(**client_kwargs)
         self.model = model
 
     def health_check(self) -> bool:

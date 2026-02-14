@@ -15,6 +15,8 @@ import sys
 from dataclasses import dataclass
 from typing import Optional
 
+import httpx
+
 sys.stdout.reconfigure(encoding='utf-8', errors='replace')
 
 
@@ -35,6 +37,7 @@ class GPTClient:
         api_key: Optional[str] = None,
         model: str = "gpt-5.2-chat-latest",
         base_url: Optional[str] = None,
+        timeout: Optional[int] = None,
     ):
         from openai import OpenAI
 
@@ -42,6 +45,8 @@ class GPTClient:
         kwargs = {"api_key": self.api_key}
         if base_url:
             kwargs["base_url"] = base_url
+        if timeout:
+            kwargs["timeout"] = httpx.Timeout(timeout, connect=10.0)
         self.client = OpenAI(**kwargs)
         self.model = model
 

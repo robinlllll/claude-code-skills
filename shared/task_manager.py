@@ -1503,9 +1503,20 @@ def pipeline_status(*, item_type=None, since_days=30) -> dict:
 
 def pipeline_items_needing_attention(stage="wikilinks", limit=20) -> list[dict]:
     """Items missing a specific pipeline stage."""
+    VALID_STAGE_COLS = {
+        "has_frontmatter",
+        "has_tickers",
+        "has_framework_tags",
+        "has_wikilinks",
+        "is_reviewed",
+    }
+
     stage_col = f"has_{stage}" if not stage.startswith("has_") else stage
     if stage_col == "has_reviewed":
         stage_col = "is_reviewed"
+
+    if stage_col not in VALID_STAGE_COLS:
+        raise ValueError(f"Invalid pipeline stage: {stage!r}")
 
     conn = get_db()
     try:

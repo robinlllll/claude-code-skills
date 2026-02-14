@@ -44,7 +44,9 @@ TRANSCRIPT_DIR = Path(r"C:\Users\thisi\Downloads\Earnings Transcripts")
 PROMPT_VERSION = "v0"
 LLM_MODEL = "gemini-2.0-flash"
 MAX_TOKENS_PER_CHUNK = 2000  # Approximate tokens per chunk
-GEMINI_SEMAPHORE = asyncio.Semaphore(7)  # Limit concurrent Gemini calls
+MAX_CONCURRENT_API_CALLS = 7  # Configurable concurrency limit for Gemini calls
+MAX_PDF_SIZE_MB = 50  # Skip PDFs larger than this (OOM protection)
+GEMINI_SEMAPHORE = asyncio.Semaphore(MAX_CONCURRENT_API_CALLS)
 
 # Load API key from 13F-CLAUDE .env or environment
 _env_path = Path(r"C:\Users\thisi\13F-CLAUDE\.env")
@@ -486,6 +488,18 @@ async def process_transcript(pdf_path: Path) -> dict:
         return {"status": "skipped", "reason": "no_ticker", "path": file_path_str}
 
     print(f"  Processing: {ticker} {quarter} ({pdf_path.name})")
+
+    # Size guard: skip oversized PDFs to prevent OOM
+    pdf_size_mb = pdf_path.stat().st_size / (1024 * 1024)
+    if pdf_size_mb > MAX_PDF_SIZE_MB:
+        print(
+            f"  [WARN] PDF too large ({pdf_size_mb:.1f} MB > {MAX_PDF_SIZE_MB} MB limit), skipping"
+        )
+        return {
+            "status": "skipped",
+            "reason": f"pdf_too_large ({pdf_size_mb:.1f} MB)",
+            "path": file_path_str,
+        }
 
     # Extract text
     try:

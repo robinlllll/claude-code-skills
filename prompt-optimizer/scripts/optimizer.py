@@ -479,13 +479,16 @@ def cmd_review(args) -> int:
 
     def _run_gemini():
         """Run Gemini review (Spec Compliance Auditor)."""
-        client = GeminiClient(api_key=api_key, model=args.model)
+        client = GeminiClient(api_key=api_key, model=args.model, timeout=REVIEW_TIMEOUT)
         return client.review_prompt(**review_kwargs)
 
     def _run_gpt():
         """Run GPT/Grok review (Edge Case Hunter)."""
         gpt = GPTClient(
-            api_key=gpt_api_key, model=args.gpt_model, base_url=gpt_base_url
+            api_key=gpt_api_key,
+            model=args.gpt_model,
+            base_url=gpt_base_url,
+            timeout=REVIEW_TIMEOUT,
         )
         return gpt.review_prompt(**review_kwargs)
 
