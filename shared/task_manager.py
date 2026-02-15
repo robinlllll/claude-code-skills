@@ -165,6 +165,20 @@ def get_db() -> sqlite3.Connection:
         conn.execute(
             "CREATE INDEX IF NOT EXISTS idx_tasks_scheduled ON tasks(scheduled_date)"
         )
+    # Migration: add has_themes columns if missing
+    pipe_cols = {
+        row[1]
+        for row in conn.execute("PRAGMA table_info(ingestion_pipeline)").fetchall()
+    }
+    if "has_themes" not in pipe_cols:
+        conn.execute(
+            "ALTER TABLE ingestion_pipeline ADD COLUMN has_themes INTEGER NOT NULL DEFAULT 0"
+        )
+        conn.execute("ALTER TABLE ingestion_pipeline ADD COLUMN themes_at TEXT")
+        conn.execute(
+            "ALTER TABLE ingestion_pipeline ADD COLUMN themes_found TEXT DEFAULT '[]'"
+        )
+
     conn.commit()
     return conn
 
@@ -1300,9 +1314,11 @@ def record_pipeline_entry(
     has_frontmatter=False,
     has_tickers=False,
     has_framework_tags=False,
+    has_themes=False,
     has_wikilinks=False,
     tickers_found=None,
     framework_sections=None,
+    themes_found=None,
 ) -> int:
     """Record pipeline entry. Called by ingestion skills after record_ingestion()."""
     now = datetime.now().isoformat()
@@ -1312,10 +1328,10 @@ def record_pipeline_entry(
             """INSERT OR REPLACE INTO ingestion_pipeline
                (canonical_key, note_id, item_type, item_title, source_platform,
                 ingested_at, obsidian_path,
-                has_frontmatter, has_tickers, has_framework_tags, has_wikilinks,
-                frontmatter_at, tickers_at, framework_at,
-                tickers_found, framework_sections)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                has_frontmatter, has_tickers, has_framework_tags, has_themes, has_wikilinks,
+                frontmatter_at, tickers_at, framework_at, themes_at,
+                tickers_found, framework_sections, themes_found)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
             (
                 canonical_key,
                 note_id,
@@ -1327,12 +1343,15 @@ def record_pipeline_entry(
                 int(has_frontmatter),
                 int(has_tickers),
                 int(has_framework_tags),
+                int(has_themes),
                 int(has_wikilinks),
                 now if has_frontmatter else None,
                 now if has_tickers else None,
                 now if has_framework_tags else None,
+                now if has_themes else None,
                 json.dumps(tickers_found or []),
                 json.dumps(framework_sections or []),
+                json.dumps(themes_found or []),
             ),
         )
         conn.commit()
@@ -1350,6 +1369,7 @@ def update_pipeline_stage(canonical_key, **stage_bools) -> bool:
         "has_frontmatter",
         "has_tickers",
         "has_framework_tags",
+        "has_themes",
         "has_wikilinks",
         "is_reviewed",
     }
@@ -1357,9 +1377,13 @@ def update_pipeline_stage(canonical_key, **stage_bools) -> bool:
         "has_frontmatter": "frontmatter_at",
         "has_tickers": "tickers_at",
         "has_framework_tags": "framework_at",
+        "has_themes": "themes_at",
         "has_wikilinks": "wikilinks_at",
         "is_reviewed": "reviewed_at",
     }
+
+    # Handle themes_found separately (not a bool stage)
+    themes_found = stage_bools.pop("themes_found", None)
 
     updates = {}
     now = datetime.now().isoformat()
@@ -1367,6 +1391,11 @@ def update_pipeline_stage(canonical_key, **stage_bools) -> bool:
         if k in valid_stages and v:
             updates[k] = 1
             updates[timestamp_map[k]] = now
+
+    if themes_found is not None:
+        updates["themes_found"] = (
+            json.dumps(themes_found) if isinstance(themes_found, list) else themes_found
+        )
 
     if not updates:
         return False
@@ -1459,6 +1488,7 @@ def pipeline_status(*, item_type=None, since_days=30) -> dict:
             "has_frontmatter",
             "has_tickers",
             "has_framework_tags",
+            "has_themes",
             "has_wikilinks",
             "is_reviewed",
         ]
@@ -1473,7 +1503,7 @@ def pipeline_status(*, item_type=None, since_days=30) -> dict:
                     by_type[t][s] = 0
             by_type[t]["total"] += 1
             for s in stages:
-                if r[s]:
+                if r.get(s):
                     by_type[t][s] += 1
                     stage_totals[s] += 1
 
@@ -1507,6 +1537,7 @@ def pipeline_items_needing_attention(stage="wikilinks", limit=20) -> list[dict]:
         "has_frontmatter",
         "has_tickers",
         "has_framework_tags",
+        "has_themes",
         "has_wikilinks",
         "is_reviewed",
     }
@@ -1892,6 +1923,7 @@ def format_pipeline_status(status: dict) -> str:
         "has_frontmatter",
         "has_tickers",
         "has_framework_tags",
+        "has_themes",
         "has_wikilinks",
         "is_reviewed",
     ]
@@ -1899,13 +1931,14 @@ def format_pipeline_status(status: dict) -> str:
         "has_frontmatter": "FM",
         "has_tickers": "Tickers",
         "has_framework_tags": "Framework",
+        "has_themes": "Themes",
         "has_wikilinks": "Links",
         "is_reviewed": "Reviewed",
     }
 
     lines = [
-        "| Source | Total | FM | Tickers | Framework | Links | Reviewed |",
-        "|--------|-------|----|---------|-----------|-------|----------|",
+        "| Source | Total | FM | Tickers | Framework | Themes | Links | Reviewed |",
+        "|--------|-------|----|---------|-----------|--------|-------|----------|",
     ]
 
     for t, data in sorted(status["by_type"].items()):

@@ -5,6 +5,7 @@ All auto-generated Obsidian notes must use these functions.
 """
 
 import hashlib
+import re
 import sqlite3
 from datetime import date, datetime
 from pathlib import Path
@@ -163,3 +164,76 @@ def safe_filename(name: str, max_length: int = 80) -> str:
     if len(name) > max_length:
         name = name[:max_length].rstrip()
     return name.strip()
+
+
+def patch_frontmatter(file_path, updates: dict) -> bool:
+    """Read file, find YAML frontmatter block, merge updates, write back.
+
+    Args:
+        file_path: Path to markdown file with YAML frontmatter
+        updates: Dict of fields to add/update (e.g. {"themes": ["NVDA", "PM"]})
+
+    Returns:
+        True if file was updated, False on error or no frontmatter found
+    """
+    file_path = Path(file_path)
+    if not file_path.exists():
+        return False
+
+    try:
+        content = file_path.read_text(encoding="utf-8")
+    except Exception:
+        return False
+
+    if not content.startswith("---"):
+        return False
+
+    end_idx = content.find("---", 3)
+    if end_idx == -1:
+        return False
+
+    fm_block = content[3:end_idx]
+    rest = content[end_idx + 3 :]
+
+    # Parse existing frontmatter lines
+    fm_lines = fm_block.strip().split("\n")
+
+    # Build set of existing keys
+    existing_keys = set()
+    for line in fm_lines:
+        match = re.match(r"^(\w[\w_]*)\s*:", line)
+        if match:
+            existing_keys.add(match.group(1))
+
+    # Add/update fields
+    for key, value in updates.items():
+        new_line = _format_fm_value(key, value)
+        if key in existing_keys:
+            # Replace existing line
+            for i, line in enumerate(fm_lines):
+                if re.match(rf"^{re.escape(key)}\s*:", line):
+                    fm_lines[i] = new_line
+                    break
+        else:
+            # Append new field
+            fm_lines.append(new_line)
+
+    # Reconstruct file
+    new_content = "---\n" + "\n".join(fm_lines) + "\n---" + rest
+    try:
+        file_path.write_text(new_content, encoding="utf-8")
+        return True
+    except Exception:
+        return False
+
+
+def _format_fm_value(key: str, value) -> str:
+    """Format a single frontmatter key-value line."""
+    if isinstance(value, bool):
+        return f"{key}: {'true' if value else 'false'}"
+    elif isinstance(value, (int, float)):
+        return f"{key}: {value}"
+    elif isinstance(value, list):
+        return f"{key}: [{', '.join(str(x) for x in value)}]"
+    else:
+        return f'{key}: "{value}"'

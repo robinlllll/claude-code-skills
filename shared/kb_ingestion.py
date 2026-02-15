@@ -301,6 +301,24 @@ def ingest_file(file_path, source_type="auto", source_org="", author="", ticker_
     else:
         print(f"  ✅ Indexed as #{doc_id}")
 
+    # Theme tagging
+    try:
+        from shared.theme_tagger import tag_themes
+        from shared.frontmatter_utils import patch_frontmatter
+
+        theme_result = tag_themes(text, detected_tickers=tickers)
+        if theme_result["themes"]:
+            patch_frontmatter(str(output_path), {"themes": theme_result["themes"]})
+            from shared.task_manager import update_pipeline_stage
+            update_pipeline_stage(
+                f"kb_{canonical_hash[:16]}",
+                has_themes=True,
+                themes_found=theme_result["themes"],
+            )
+            print(f"  🏷️ Themes: {theme_result['themes']}")
+    except ImportError:
+        pass
+
     return {
         "path": str(output_path),
         "title": title,

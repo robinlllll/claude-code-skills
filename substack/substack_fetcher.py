@@ -522,6 +522,26 @@ def sync_all(config_path: Path | None = None) -> dict:
                 except ImportError:
                     pass
 
+                # Theme tagging
+                try:
+                    from shared.theme_tagger import tag_themes
+                    from shared.frontmatter_utils import patch_frontmatter
+
+                    theme_result = tag_themes(markdown_text, detected_tickers=tickers)
+                    if theme_result["themes"]:
+                        patch_frontmatter(
+                            saved_path, {"themes": theme_result["themes"]}
+                        )
+                        from shared.task_manager import update_pipeline_stage
+
+                        update_pipeline_stage(
+                            canonical_key,
+                            has_themes=True,
+                            themes_found=theme_result["themes"],
+                        )
+                except ImportError:
+                    pass
+
                 stats["new_saved"] += 1
                 stats["saved_paths"].append(str(saved_path))
 

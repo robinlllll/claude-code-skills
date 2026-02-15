@@ -163,6 +163,59 @@ def _get_kb_recent(days=1):
         return 0
 
 
+def _get_yesterday_themes() -> dict:
+    """Get yesterday's ingested items grouped by theme.
+
+    Returns:
+        {
+            "total": 12,
+            "by_theme": {"NVDA": [{"title": "...", "type": "substack"}, ...], ...},
+            "unthemed": [{"title": "...", "type": "podcast"}, ...],
+        }
+    """
+    try:
+        from shared.task_manager import get_db
+        import json as _json
+
+        conn = get_db()
+        try:
+            yesterday = (datetime.now() - timedelta(days=1)).strftime("%Y-%m-%d")
+            today_str = datetime.now().strftime("%Y-%m-%d")
+            rows = conn.execute(
+                """SELECT item_title, item_type, themes_found, tickers_found, has_themes
+                   FROM ingestion_pipeline
+                   WHERE ingested_at >= ? AND ingested_at < ?""",
+                (yesterday, today_str),
+            ).fetchall()
+
+            by_theme = {}
+            unthemed = []
+            for row in rows:
+                r = dict(row)
+                themes = _json.loads(r.get("themes_found") or "[]")
+                if themes:
+                    for t in themes:
+                        by_theme.setdefault(t, []).append({
+                            "title": r["item_title"][:60],
+                            "type": r["item_type"],
+                        })
+                else:
+                    unthemed.append({
+                        "title": r["item_title"][:60],
+                        "type": r["item_type"],
+                    })
+
+            return {
+                "total": len(rows),
+                "by_theme": by_theme,
+                "unthemed": unthemed,
+            }
+        finally:
+            conn.close()
+    except Exception:
+        return {"total": 0, "by_theme": {}, "unthemed": []}
+
+
 def _check_13f_deadline():
     """Check if within 7 days of a 13F deadline."""
     deadlines = [
@@ -268,11 +321,30 @@ def generate_brief(quick=False):
             lines.append(f"- **{s['ticker']}** thesis 已 {s['days']} 天未更新")
         lines.append("")
 
-    # 6. KB recent
-    kb_count = _get_kb_recent()
-    if kb_count > 0:
-        lines.append(f"## 📚 知识库\n")
-        lines.append(f"- 昨日新增 {kb_count} 份研究资料\n")
+    # 6. Yesterday's ingestion by theme (§ 📥 昨日入库)
+    theme_data = _get_yesterday_themes()
+    if theme_data["total"] > 0:
+        lines.append(f"## 📥 昨日入库 ({theme_data['total']} 条)\n")
+
+        if theme_data["by_theme"]:
+            lines.append("| Theme | Count | 代表性标题 |")
+            lines.append("|-------|-------|-----------|")
+            for theme, items in sorted(theme_data["by_theme"].items(), key=lambda x: -len(x[1])):
+                rep_title = items[0]["title"]
+                lines.append(f"| {theme} | {len(items)} | {rep_title} |")
+
+        if theme_data["unthemed"]:
+            lines.append(f"\n无主题: {len(theme_data['unthemed'])} 条")
+            for item in theme_data["unthemed"][:3]:
+                lines.append(f"- [{item['type']}] {item['title']}")
+
+        lines.append("")
+    else:
+        # Fallback to original KB count if no pipeline data
+        kb_count = _get_kb_recent()
+        if kb_count > 0:
+            lines.append(f"## 📚 知识库\n")
+            lines.append(f"- 昨日新增 {kb_count} 份研究资料\n")
 
     # 7. 13F deadline
     deadline_msg = _check_13f_deadline()

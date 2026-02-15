@@ -354,6 +354,28 @@ except ImportError:
 ```
 用 podwise link URL hash 或标题 hash 作为 canonical_key。
 
+## Theme Tagging
+
+**自动执行:** Pipeline tracking 之后，对内容进行投资主题标签：
+```python
+try:
+    from shared.theme_tagger import tag_themes
+    from shared.frontmatter_utils import patch_frontmatter
+
+    theme_result = tag_themes(text, detected_tickers=tickers)
+    if theme_result["themes"]:
+        patch_frontmatter(str(output_path), {"themes": theme_result["themes"]})
+        from shared.task_manager import update_pipeline_stage
+        update_pipeline_stage(
+            f"podcast_{url_hash_or_title_hash}",
+            has_themes=True,
+            themes_found=theme_result["themes"],
+        )
+except ImportError:
+    pass
+```
+如果 `theme_tagger` 不可用或返回空列表，跳过（不报错）。
+
 ## Post-Ingestion
 
 **自动执行:** 完成所有处理后，立即对输出文件夹执行 link 扫描（等同于 `/link 信息源/播客/`），为新增笔记添加 [[wikilinks]]。
