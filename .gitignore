@@ -26,6 +26,9 @@ shared/data/
 vault-intel/data/
 sellside-tracker/data/*.yaml
 
+# Runtime output (pipeline runs, cached data)
+**/runs/
+
 # Log files
 *.log
 
