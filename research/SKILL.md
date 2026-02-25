@@ -1,6 +1,109 @@
+---
+name: research
+description: "股票研究统一入口，整合知识库、网络搜索、多 AI 验证。Use when user says 'research', '研究', 'look up ticker', or wants to investigate a stock with multi-source verification."
+metadata:
+  version: 1.0.0
+---
+
 # /research - 一键研究命令
 
 股票研究的统一入口，整合知识库、网络搜索、多 AI 验证。
+
+## 执行步骤
+
+1. **解析输入**
+   - 提取 TICKER 或研究主题
+   - 识别 --deep 标志
+   - 提取具体问题（如有）
+
+1.5 **检查历史 Open Questions**
+   - 调用 `task_manager.py questions TICKER` 查看该 ticker 的未解决问题
+   - 如果有 open questions，在报告开头展示：
+     ```
+     > 📌 **上次研究遗留问题：**
+     > 1. [HIGH] 问题描述...
+     > 2. [MED] 问题描述...
+     > 本次研究将优先尝试回答这些问题。
+     ```
+   - 本次研究中如果回答了旧问题，调用 answer_question() 更新状态
+
+2. **市场数据快照**（仅个股 Ticker，主题研究跳过）
+   ```bash
+   cd ~/.claude/skills && /c/Users/thisi/AppData/Local/Python/pythoncore-3.14-64/python.exe shared/market_snapshot.py TICKER
+   ```
+   - 自动拉取: 价格/52周区间/市值、估值指标(P/E/PEG/EV)、盈利能力(毛利率/ROE)、分析师目标价与评级、内部人交易、机构持仓 Top 10
+   - 输出直接嵌入报告的 `公司概况` 和 `估值参考` 部分
+   - 来源标注: `[YF]` (Yahoo Finance via yfinance)
+   - 可选按模块调用: `--section price`, `--section analysts` 等
+   - JSON 模式: `--json` 输出机器可读格式
+
+3. **知识库检索**
+   - 查询 knowledge_index: `kb_ingestion.py search --ticker TICKER`
+     获取所有已入库的研报/纪要，来源标注 [KB]
+   - 搜索 `PORTFOLIO/portfolio_monitor/research/companies/{TICKER}/`
+   - 搜索 Obsidian `收件箱/` 相关文章
+   - 读取现有 thesis.md（如有）
+
+3. **Supply Chain Context**
+   - 查询 `~/.claude/skills/supply-chain/data/supply_chain.db`：
+     `SELECT * FROM mentions WHERE mentioned_ticker = '{TICKER}' ORDER BY date DESC`
+   - 或读取 `~/Documents/Obsidian Vault/研究/供应链/{TICKER}_mentions.md`
+   - 展示：哪些公司在财报中提到了该 ticker，说了什么（前瞻性信号）
+
+4. **13F Institutional Activity**
+   - 搜索 `~/13F-CLAUDE/output/*/` 中的 CSV 文件，查找包含该 ticker 的持仓记录
+   - 展示：哪些知名基金经理持有该 ticker，季度变动趋势
+   - 这是 "smart money" 验证——机构是在买入还是卖出
+
+5. **Podcast Mentions**
+   - 搜索 `~/Documents/Obsidian Vault/信息源/播客/` 中提到该 ticker/公司名的播客
+   - 提取关键论点和数据点
+
+6. **ChatGPT Prior Analysis**
+   - 搜索 `~/Documents/Obsidian Vault/ChatGPT/Investment Research/` 中提到该 ticker 的对话
+   - 提取之前的分析观点，避免重复研究
+
+7. **NotebookLM 查询**（如果有相关 notebook）
+   - 调用 `/notebooklm` 查询相关内容
+   - 获取 citation-backed 答案
+
+8. **网络搜索**（--deep 模式）
+   - WebSearch 最新新闻、财报
+   - 搜索竞争对手动态
+
+5. **生成研究报告**
+   - 按输出格式整合信息
+   - 按 Source Attribution 规则为每条事实性陈述添加来源标签
+   - 定量数据必须有具体来源标签（不允许 [Model]）
+   - 标记需要进一步验证的假设
+
+6. **提取并记录 Open Questions**
+   - 从报告中识别标记为 "❓ 待研究" 的问题和数据缺口
+   - 将新 open questions 写入 SQLite:
+     ```python
+     from shared.task_manager import add_open_question
+     add_open_question(ticker, question, priority="medium", context="...", source_note="{research_note_path}")
+     ```
+   - 同时写入研究笔记的 frontmatter `open_questions:` 字段（仅问题文本列表）
+   - 如果本次回答了之前的 open question，更新 DB status 为 answered:
+     ```python
+     from shared.task_manager import answer_question
+     answer_question(question_id, answered_in="{research_note_path}", answer_summary="...")
+     ```
+
+7. **保存到 Obsidian**
+   - 路径: `Documents/Obsidian Vault/研究/研究笔记/{TICKER}_YYYY-MM-DD.md`
+   - 更新 thesis 文件（如适用）
+
+## Important Rules
+
+- **MUST** tag every factual statement with a source label (e.g., `[YF]`, `[Vault]`, `[Web]`). No untagged facts.
+- **NEVER** use `[Model]` for quantitative data — model knowledge is not a valid source for numbers.
+- **MUST** cross-reference contradictory information: when sources conflict, explicitly note the discrepancy and tag all sides.
+- **NEVER** make buy/sell recommendations — only provide analysis framework and data.
+- **MUST** timestamp all valuation data (P/E, price targets, etc.).
+- **MUST** display open questions from previous sessions at the top of the report before starting new analysis.
+- When multiple sources confirm the same fact, tag all of them: e.g., `[Vault][Transcript]`.
 
 ## 使用方式
 
@@ -120,92 +223,6 @@
 - FDA 对 IQOS 的 PMTA 审批存在不确定性，最新进展未明 [Web]
 - 竞争对手 BAT 的 Vuse 在美国市占率提升至 38% [Transcript][Vault]
 ```
-
-## 执行步骤
-
-1. **解析输入**
-   - 提取 TICKER 或研究主题
-   - 识别 --deep 标志
-   - 提取具体问题（如有）
-
-1.5 **检查历史 Open Questions**
-   - 调用 `task_manager.py questions TICKER` 查看该 ticker 的未解决问题
-   - 如果有 open questions，在报告开头展示：
-     ```
-     > 📌 **上次研究遗留问题：**
-     > 1. [HIGH] 问题描述...
-     > 2. [MED] 问题描述...
-     > 本次研究将优先尝试回答这些问题。
-     ```
-   - 本次研究中如果回答了旧问题，调用 answer_question() 更新状态
-
-2. **市场数据快照**（仅个股 Ticker，主题研究跳过）
-   ```bash
-   cd ~/.claude/skills && /c/Users/thisi/AppData/Local/Python/pythoncore-3.14-64/python.exe shared/market_snapshot.py TICKER
-   ```
-   - 自动拉取: 价格/52周区间/市值、估值指标(P/E/PEG/EV)、盈利能力(毛利率/ROE)、分析师目标价与评级、内部人交易、机构持仓 Top 10
-   - 输出直接嵌入报告的 `公司概况` 和 `估值参考` 部分
-   - 来源标注: `[YF]` (Yahoo Finance via yfinance)
-   - 可选按模块调用: `--section price`, `--section analysts` 等
-   - JSON 模式: `--json` 输出机器可读格式
-
-3. **知识库检索**
-   - 查询 knowledge_index: `kb_ingestion.py search --ticker TICKER`
-     获取所有已入库的研报/纪要，来源标注 [KB]
-   - 搜索 `PORTFOLIO/portfolio_monitor/research/companies/{TICKER}/`
-   - 搜索 Obsidian `收件箱/` 相关文章
-   - 读取现有 thesis.md（如有）
-
-3. **Supply Chain Context**
-   - 查询 `~/.claude/skills/supply-chain/data/supply_chain.db`：
-     `SELECT * FROM mentions WHERE mentioned_ticker = '{TICKER}' ORDER BY date DESC`
-   - 或读取 `~/Documents/Obsidian Vault/研究/供应链/{TICKER}_mentions.md`
-   - 展示：哪些公司在财报中提到了该 ticker，说了什么（前瞻性信号）
-
-4. **13F Institutional Activity**
-   - 搜索 `~/13F-CLAUDE/output/*/` 中的 CSV 文件，查找包含该 ticker 的持仓记录
-   - 展示：哪些知名基金经理持有该 ticker，季度变动趋势
-   - 这是 "smart money" 验证——机构是在买入还是卖出
-
-5. **Podcast Mentions**
-   - 搜索 `~/Documents/Obsidian Vault/信息源/播客/` 中提到该 ticker/公司名的播客
-   - 提取关键论点和数据点
-
-6. **ChatGPT Prior Analysis**
-   - 搜索 `~/Documents/Obsidian Vault/ChatGPT/Investment Research/` 中提到该 ticker 的对话
-   - 提取之前的分析观点，避免重复研究
-
-7. **NotebookLM 查询**（如果有相关 notebook）
-   - 调用 `/notebooklm` 查询相关内容
-   - 获取 citation-backed 答案
-
-8. **网络搜索**（--deep 模式）
-   - WebSearch 最新新闻、财报
-   - 搜索竞争对手动态
-
-5. **生成研究报告**
-   - 按输出格式整合信息
-   - 按 Source Attribution 规则为每条事实性陈述添加来源标签
-   - 定量数据必须有具体来源标签（不允许 [Model]）
-   - 标记需要进一步验证的假设
-
-6. **提取并记录 Open Questions**
-   - 从报告中识别标记为 "❓ 待研究" 的问题和数据缺口
-   - 将新 open questions 写入 SQLite:
-     ```python
-     from shared.task_manager import add_open_question
-     add_open_question(ticker, question, priority="medium", context="...", source_note="{research_note_path}")
-     ```
-   - 同时写入研究笔记的 frontmatter `open_questions:` 字段（仅问题文本列表）
-   - 如果本次回答了之前的 open question，更新 DB status 为 answered:
-     ```python
-     from shared.task_manager import answer_question
-     answer_question(question_id, answered_in="{research_note_path}", answer_summary="...")
-     ```
-
-7. **保存到 Obsidian**
-   - 路径: `Documents/Obsidian Vault/研究/研究笔记/{TICKER}_YYYY-MM-DD.md`
-   - 更新 thesis 文件（如适用）
 
 ## 与其他 Skills 的关系
 

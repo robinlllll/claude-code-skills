@@ -1,6 +1,9 @@
 ---
 name: trade
-description: Trade Logger - Log trades with execution details, thesis links, and risk management
+description: "Trade Logger - Log trades with execution details, thesis links, and risk management. Use when user says 'log trade', 'BUY', 'SELL', 'SHORT', 'COVER', '记录交易', or mentions executing a trade."
+allowed-tools: "Bash Read Write Edit Glob Grep"
+metadata:
+  version: 1.0.0
 ---
 
 # Trade Logger
@@ -74,93 +77,68 @@ If a file with that name already exists (multiple trades same day), append a seq
 
 If thesis file exists, append an entry to the Position History table.
 
-### 6. Confirm to User
+### 5.5. Record Decision to SQLite
+
+After logging the trade file and updating thesis, record the decision in the investments database:
+
+```python
+import sys
+sys.path.insert(0, r'C:\Users\thisi\.claude\skills\shared')
+from schemas import DecisionRecord
+from db_utils import init_db, insert_decision
+
+init_db()  # ensures table exists
+
+record = DecisionRecord(
+    date="{YYYY-MM-DD}",          # today's date
+    ticker="{TICKER}",
+    decision_type="{action}",      # map: BUY→buy, SELL→sell, ADD→add, TRIM→trim, SHORT→buy, COVER→sell
+    reasoning="{REASON}",          # the quoted reason from user's command
+    conviction=conviction,         # from thesis.yaml conviction field, default 5 if not found
+    thesis_link="PORTFOLIO/research/companies/{TICKER}/thesis.md",
+    trigger="{trigger}",           # infer from context: "earnings" if post-earnings, "thesis" if thesis-driven, "other" default
+)
+decision_id = insert_decision(record)
+```
+
+- Add `decision_id: {UUID}` to the trade .md file's frontmatter
+- Display in confirmation: `Decision ID: {first 8 chars}`
+- If db write fails: log warning but do NOT block the trade log (trade file is the primary record)
+
+### 6. Thesis Status Auto-Transition
+
+After logging the trade and updating thesis.md, check thesis.yaml for status transitions:
+
+1. Read `thesis.yaml` for the ticker (if it exists, skip silently if not)
+2. Get current `thesis_status` (default: none → skip)
+
+**If ACTION is BUY, LONG, or ADD:**
+- If `thesis_status` is `watching` or `past` → update to `active`
+- Set `status_changed_at` to today, `status_reason` to "Auto: Position opened via /trade"
+- Log: "Thesis status: {old} → active (auto-transition)"
+
+**If ACTION is SELL or COVER:**
+- Check if full exit: remaining shares == 0 OR user explicitly says "全部", "full exit", "清仓"
+- If full exit AND `thesis_status` is `active` → update to `past`
+- Set `status_changed_at` to today, `status_reason` to "Auto: Full position exit"
+- Log: "Thesis status: active → past (auto-transition)"
+- If PARTIAL exit (TRIM or shares remaining > 0) → do NOT change status
+
+Write changes to thesis.yaml using `yaml.dump(data, f, default_flow_style=False, allow_unicode=True, sort_keys=False)`.
+
+### 7. Confirm to User
 
 Display a brief confirmation:
 ```
 ✓ Logged: BUY 100 TSM @ $332.71 ($33,271)
   Position after: 8,900 shares (15.55% of NAV)
   Thesis: Linked ✓
+  Status: watching → active (auto)
 ```
 
-## Trade Log Template
+See `references/trade-template.md` for template and calculation formulas.
 
-```markdown
-# Trade: {ACTION} {TICKER}
-
-| Field | Value |
-|-------|-------|
-| Date | {YYYY-MM-DD HH:MM} |
-| Action | {ACTION} |
-| Ticker | {TICKER} |
-| Qty | {QTY} |
-| Price | ${PRICE} |
-| Total | ${TOTAL} |
-| % of NAV | {PCT}% |
-
-## Position After Trade
-- Shares: {NEW_SHARES}
-- Avg Cost: ${AVG_COST}
-- % of NAV: {POSITION_PCT}%
-
-## Rationale
-{REASON from command}
-
-## Thesis Link
-[{TICKER} Thesis](../../research/companies/{TICKER}/thesis.md)
-
-## Risk (fill manually)
-- Stop: $___
-- Target: $___
-
----
-*Logged via /trade command*
-```
-
-### 7. Post-Trade 自动检查
-
-交易记录完成后，Claude **自动执行**以下检查（不需要用户要求）：
-
-#### 1. Thesis 自动检查
-- 读取 `~/PORTFOLIO/portfolio_monitor/research/companies/{TICKER}/thesis.md`
-- **如果 thesis 存在:**
-  - 读取 Position History 表
-  - 如果当前交易与 thesis 记录一致 → 自动添加新行到 Position History，输出 1 行摘要
-  - 如果数据不一致（如 thesis 记录的方向/仓位与交易矛盾）→ 提示用户确认，不静默覆盖
-  - 输出: "[Thesis: conviction High, last updated 15 days ago]"
-- **如果 thesis 不存在:**
-  - "{TICKER} 没有投资论文，建议 `/thesis {TICKER}` 创建"
-
-#### 2. Passed Record 自动检查
-- 检查 `~/PORTFOLIO/portfolio_monitor/research/companies/{TICKER}/passed.md`
-- **如果 passed.md 存在:**
-  - "你曾在 {date} pass 了 {TICKER}，当时理由: {reason}。确定要交易？"
-- **如果不存在:** 静默通过
-
-#### 3. Flashback 建议（不自动执行）
-- 输出: "如需查看完整研究轨迹: `/flashback {TICKER}`"
-- 不自动执行（扫描 12 个数据源，token 消耗大）
-
-After exit trades (SELL/COVER), also prompt: "考虑更新 thesis: `/thesis {TICKER} update \"Exited — {REASON}\"`"
-
-#### 4. Auto-Task Creation (via task_manager)
-交易记录完成后，自动创建跟进任务（7 天去重，不会重复创建）：
-```python
-try:
-    import sys; sys.path.insert(0, r'C:\Users\thisi\.claude\skills')
-    from shared.task_manager import auto_create_task
-    from datetime import date, timedelta
-    tomorrow = (date.today() + timedelta(days=1)).isoformat()
-    auto_create_task(
-        f"Update thesis after {ACTION} {TICKER}",
-        source="post-trade", category="thesis", ticker=TICKER,
-        priority=2, due_at=tomorrow, estimated_minutes=20,
-        dedup_key=f"post-trade-thesis-{TICKER}-{date.today().isoformat()}"
-    )
-except ImportError:
-    pass
-```
-只在终端简短提示: `[Auto-task: Update thesis after BUY NVDA — due tomorrow]`
+See `references/post-trade-checks.md` for auto-checks, decision journal, and reflection questions.
 
 ## If No Position Data Available
 
@@ -176,41 +154,10 @@ When logging exits, the trade log should note:
 - Remaining position (if any)
 - Calculate realized P&L if average cost is known
 
-## Key Calculations
-
-**Trade Total:**
-```
-total = qty * price
-```
-
-**Position % of NAV:**
-```
-pct_nav = (total_shares * current_price) / nav * 100
-```
-
-**New Average Cost (for ADD/BUY):**
-```
-new_avg = (old_qty * old_avg + new_qty * new_price) / (old_qty + new_qty)
-```
-
 ## Output Files
 
 - `decisions/trades/{YYYY-MM-DD}_{ACTION}_{TICKER}.md` - Trade log
 - Updates `research/companies/{TICKER}/thesis.md` - Position history (if exists)
-
-## Decision Journal
-
-Trade logging and decision journaling are **separate concerns**:
-- `/trade` = execution record (speed, minimal friction, market hours)
-- Decision Journal = thought process + emotions (captured via **Nightly Journal Check at 10 PM** through Telegram)
-
-**Do NOT ask DJ questions during `/trade`.** The Telegram bot will automatically push each unrecorded trade at 10 PM and walk through the DJ flow (emotion → confidence → why now → what if wrong → alternatives).
-
-If the user wants to record DJ immediately, tell them to use `/dj TICKER ACTION` in Telegram.
-
-## 🪞 交易反思（自动追加）
-
-交易记录完成后，自动追加 `shared/reflection_questions.yaml` 中的 post_trade 问题（T1-T3）。
 
 ## Important Notes
 

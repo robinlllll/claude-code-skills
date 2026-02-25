@@ -9,9 +9,42 @@ Full pipeline: **Implied Returns** -> **Stock-Level Skill** -> **Performance Sco
 
 Scores fund managers on sector-relative implied performance (vs XBI/XLK/SPY) and blends with behavioral credibility scores using conditional alpha weighting.
 
-## Project Location
+## Execution Steps (Full Pipeline)
 
-`C:\Users\thisi\13F-CLAUDE`
+Python path: `/c/Users/thisi/AppData/Local/Python/pythoncore-3.14-64/python.exe`
+Working directory: `C:\Users\thisi\13F-CLAUDE`
+
+Run steps 1-4 sequentially. Steps 1 and 2 are independent and can run in parallel via subagents.
+
+```python
+import sys, subprocess
+sys.path.insert(0, r'C:\Users\thisi\13F-CLAUDE')
+
+PYTHON = r'/c/Users/thisi/AppData/Local/Python/pythoncore-3.14-64/python.exe'
+GROUP = "<GROUP>"
+
+# Step 1: Implied Returns (parallel with Step 2)
+subprocess.run([PYTHON, 'implied_returns.py', '--group', GROUP, '--all-quarters'], cwd=r'C:\Users\thisi\13F-CLAUDE')
+
+# Step 2: Stock-Level Skill (parallel with Step 1)
+subprocess.run([PYTHON, 'stock_level_skill.py', '--group', GROUP, '--all-quarters', '--save'], cwd=r'C:\Users\thisi\13F-CLAUDE')
+
+# Step 3: Performance Scorer (requires Step 1 + 2 output)
+subprocess.run([PYTHON, 'performance_scorer.py', '--group', GROUP], cwd=r'C:\Users\thisi\13F-CLAUDE')
+
+# Step 4: Hybrid Credibility + Obsidian export
+subprocess.run([PYTHON, 'pm_credibility.py', '--group', GROUP, '--quarter', '2025-Q3', '--obsidian'], cwd=r'C:\Users\thisi\13F-CLAUDE')
+```
+
+## Important Rules
+
+- MUST use `--save` flag when running `stock_level_skill.py` — without it, no JSON output is written and Step 3 will fail
+- MUST run Steps 1 and 2 to completion before starting Step 3 — Step 3 reads their output files
+- MUST verify data prerequisites before running the pipeline (see Prerequisites Check section below)
+- NEVER skip the prerequisites check when adding new managers — if they have < 4 quarters on disk, run `batch_historical_download.py` first
+- NEVER use a generic group name that doesn't match `pm_groups.yaml` — group names are case-sensitive (Biotech, TMT, Healthcare, Generalist, Financials, Energy, CN_PM)
+- IMPORTANT: The Veto Gate always applies — if `performance_score < 30`, the hybrid final score is hard-capped at 50 regardless of behavioral score
+- IMPORTANT: When using subagents, launch Steps 1 and 2 as parallel subagents and wait for both to complete before proceeding to Step 3
 
 ## When to Use This Skill
 
@@ -81,10 +114,11 @@ If price data is missing for benchmark ETFs, run Phase 2:
 python expand_price_data.py
 ```
 
-## Full Pipeline Execution
+## Project Location
 
-Python path: `/c/Users/thisi/AppData/Local/Python/pythoncore-3.14-64/python.exe`
-Working directory: `C:\Users\thisi\13F-CLAUDE`
+`C:\Users\thisi\13F-CLAUDE`
+
+## Step-by-Step Details
 
 ### Step 1: Implied Returns (Phase 3)
 
@@ -142,33 +176,6 @@ python pm_credibility.py --group <GROUP> --quarter <LATEST_QUARTER> --obsidian
   - N ≥ 15: pure performance (α = 0.0)
 - **Veto Gate:** If performance_score < 30, cap final score at 50
 - Output: `研究/13F/credibility/{GROUP}_{QUARTER}_credibility.md`
-
-## Running the Full Pipeline (Recommended)
-
-For a full pipeline run, execute steps 1-4 sequentially. Use subagents for steps 1+2 in parallel since they're independent:
-
-```python
-import sys, subprocess
-sys.path.insert(0, r'C:\Users\thisi\13F-CLAUDE')
-
-PYTHON = r'/c/Users/thisi/AppData/Local/Python/pythoncore-3.14-64/python.exe'
-GROUP = "<GROUP>"
-
-# Step 1 + 2 can run in parallel (both read from holdings + prices)
-# Step 1: Implied Returns
-subprocess.run([PYTHON, 'implied_returns.py', '--group', GROUP, '--all-quarters'], cwd=r'C:\Users\thisi\13F-CLAUDE')
-
-# Step 2: Stock-Level Skill
-subprocess.run([PYTHON, 'stock_level_skill.py', '--group', GROUP, '--all-quarters', '--save'], cwd=r'C:\Users\thisi\13F-CLAUDE')
-
-# Step 3: Performance Scorer (reads output from steps 1+2)
-subprocess.run([PYTHON, 'performance_scorer.py', '--group', GROUP], cwd=r'C:\Users\thisi\13F-CLAUDE')
-
-# Step 4: Hybrid Credibility + Obsidian
-subprocess.run([PYTHON, 'pm_credibility.py', '--group', GROUP, '--quarter', '2025-Q3', '--obsidian'], cwd=r'C:\Users\thisi\13F-CLAUDE')
-```
-
-**When using subagents:** Launch Step 1 and Step 2 as parallel subagents. Wait for both to complete. Then run Step 3 and Step 4 sequentially.
 
 ## `status` Subcommand
 

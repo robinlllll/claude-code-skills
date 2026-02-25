@@ -1,11 +1,22 @@
 ---
 name: socratic-writer
-description: 苏格拉底式写作助手 - Grok 主导思维引擎，多AI协同(Gemini量化+GPT定性+Grok逆向)，自动研究，输出到Obsidian。适用于任何需要深度思考的话题（投资、商业、技术、社会等）。
+description: 苏格拉底式写作助手 - Grok 主导思维引擎，多AI协同(Gemini假设核查+GPT框架连接+Grok盲点扫描)，自动研究，输出到Obsidian。适用于任何需要深度思考的话题（投资、商业、技术、社会等）。
 ---
 
 # Socratic Writer - 苏格拉底式写作助手
 
-Grok 作为思维主引擎，通过尖锐提问、研究诊断、综合消化、论点评估，帮你把模糊的想法变成经得起考验的清晰论点。适用于任何话题——投资、商业决策、技术判断、社会议题。Claude 只做管道（调 API、传上下文、跑脚本）。
+Grok 作为思维主引擎，通过尖锐提问、研究诊断、综合消化、论点评估，帮你把模糊的想法变成经得起考验的清晰论点。三个AI从"对抗辩论"转向"探索式协同"：Gemini核查假设、GPT连接框架、Grok扫描盲点。适用于任何话题——投资、商业决策、技术判断、社会议题。Claude 只做管道（调 API、传上下文、跑脚本）。
+
+## Important Rules
+
+- **MUST use Grok as primary thinking engine** — Grok runs socratic, diagnose, synthesize, and evaluate. Claude is pipeline only; never substitute Claude analysis for Grok.
+- **NEVER skip the Socratic questioning phase** — Collect all 5 Grok questions and user answers before moving to research or debate. Skipping degrades output quality.
+- **MUST complete research diagnosis before debate** — Run `grok_engine.py diagnose` first; debate.py needs the research context to run meaningful analysis.
+- **NEVER summarize or condense AI model outputs** — Show full unabridged responses from Grok, Gemini, and GPT. Summarizing destroys the multi-AI value.
+- **MUST verify all API keys before starting a session** — Check Grok, Gemini, and OpenAI keys are live before invoking any model. Never silently fall back to a single provider.
+- **MUST include citations/sources in final export** — All factual claims from research phases must be traceable. Export to Obsidian must carry source references.
+- **Iterate until score ≥ 7** — If `evaluate` scores < 7, loop back to synthesize. Never export a sub-7 draft without flagging it to the user.
+- **Default to no-rebuttal mode** — `debate.py run` without `--with-rebuttal` saves ~106% cost. Only add rebuttal for high-stakes or highly contested topics.
 
 ## When to Use This Skill
 
@@ -27,12 +38,16 @@ Trigger when user:
 [2] Grok 研究诊断 (结构化研究清单, temp=0.3)
     → 自动路由: local / NLM / 13F / web
     ↓
-[3] 三方辩论 (debate.py run)
-    • Phase 1: Gemini(量化) + GPT(定性) + Grok(逆向) 并行
-    • Phase 2: 交叉反驳
+[3] 四方并行分析 (debate.py run)
+    • Gemini(假设核查) + GPT(框架连接) + Grok(盲点扫描) — 协同
+    • Grok(魔鬼代言人) — 对抗你的论点
+    • 可选: --with-rebuttal 启用交叉反驳 (+106% 成本)
+    ↓
+[3.5] 集体谬误检测 (自动)
+    • 主题收敛度 > 80% → 注入元认知 prompt
     ↓
 [4] Grok 综合消化 (3 个核心张力, temp=0.5)
-    • 从 6 个挑战文件提炼最关键矛盾
+    • 从 4 个分析文件提炼最关键矛盾
     • 向作者提聚焦问题
     ↓
 [5] 用户回应张力 → 论点 v2
@@ -48,9 +63,10 @@ Trigger when user:
 
 | AI | Role | What It Does | What It Does NOT Do |
 |----|------|-------------|---------------------|
-| **Grok** | 思维主引擎 | 提问、诊断、挑战、综合、评估 | — |
-| **Gemini** | 量化专家 | 数字验证、模型压测、基率 | 不提问、不综合 |
-| **GPT** | 定性专家 | 竞争动态、叙事分析、行为偏差 | 不提问、不综合 |
+| **Grok** | 思维主引擎 + 盲点扫描仪 | 提问、诊断、扫描盲点(隐含假设/缺席利益相关者/遗漏变量/边界条件/Kill Criteria)、综合、评估 | — |
+| **Grok** | 魔鬼代言人 | 针对**用户论点**的对抗挑战：核心反论点、致命弱点、反身性陷阱、历史类比打脸、对手最优策略 | 不与其他AI辩论 |
+| **Gemini** | 假设核查员 | 可验证主张清单、假设分层、压力测试参数、数据缺口地图、历史基率、量化确信度 | 不提问、不综合 |
+| **GPT** | 框架连接器 | 相关理论框架、现有研究对比、类似案例库、框架适用边界、概念精确化、创新点识别 | 不提问、不综合 |
 | **Claude** | 管道工 | 调API、传上下文、跑脚本、展示结果 | 不分析、不判断 |
 
 ## Quick Start
@@ -82,8 +98,10 @@ python run.py grok_engine.py diagnose --session SESSION_ID
 # Step 5: 自动执行研究
 python run.py grok_engine.py research --session SESSION_ID
 
-# Step 6: 三方辩论
+# Step 6: 三方协同分析 (默认无反驳，节省 106% 成本)
 python run.py debate.py run --session SESSION_ID
+# 完整模式（含交叉反驳）:
+# python run.py debate.py run --session SESSION_ID --with-rebuttal
 
 # Step 7: Grok 综合消化
 python run.py grok_engine.py synthesize --session SESSION_ID
@@ -97,58 +115,7 @@ python run.py export.py obsidian --session SESSION_ID
 
 ## Commands Reference
 
-### Grok Engine (NEW - Primary)
-```bash
-grok_engine.py socratic  --session ID [--topic T]  # 5 个尖锐问题
-grok_engine.py diagnose  --session ID               # 研究诊断
-grok_engine.py research  --session ID               # 自动执行研究
-grok_engine.py synthesize --session ID              # 综合消化 → 3 张力
-grok_engine.py evaluate  --session ID --response T  # 评估 v1→v2
-```
-
-### Session Management
-```bash
-session.py new --topic "..."        # 新建会话
-session.py list                     # 列出所有会话
-session.py status                   # 当前会话状态
-session.py resume --id ID           # 恢复会话
-session.py close --id ID            # 关闭会话
-```
-
-### Parallel Debate
-```bash
-debate.py run --session ID           # Full: challenges + rebuttals
-debate.py challenge --session ID     # Parallel challenges only
-debate.py rebuttal --session ID      # Rebuttal round only
-debate.py status --session ID        # Show debate status
-```
-
-### Research
-```bash
-research.py local --query "..."     # 本地文件搜索
-research.py nlm --question "..."    # NotebookLM 查询
-research.py web --query "..."       # 网络搜索（Claude 执行）
-research.py summary --session ID    # 研究摘要
-```
-
-### Arbitration
-```bash
-arbitrate.py compare --session ID   # 对比所有AI意见
-arbitrate.py decide --session ID --topic "主题" --decision "决定"
-```
-
-### Export
-```bash
-export.py obsidian --session ID     # 导出到 Obsidian
-export.py markdown --session ID     # 导出为 Markdown
-export.py json --session ID         # 导出原始数据
-```
-
-### Legacy (still available)
-```bash
-devil.py challenge --session ID     # Gemini 单独质疑
-perspective.py challenge --session ID  # GPT 单独视角
-```
+See [`references/commands-reference.md`](references/commands-reference.md) for all CLI commands (grok_engine, session, debate, research, arbitrate, export, legacy).
 
 ## Data Structure
 
@@ -162,15 +129,17 @@ data/sessions/{session_id}/
 │   ├── research_log.json   # 研究执行记录
 │   └── research_execution.json  # 自动研究结果
 ├── challenges/
-│   ├── gemini.json         # Gemini 量化挑战
-│   ├── gpt.json            # GPT 定性挑战
-│   ├── grok.json           # Grok 逆向挑战
-│   ├── gemini_rebuttal.json
-│   ├── gpt_rebuttal.json
-│   ├── grok_rebuttal.json
+│   ├── gemini.json         # Gemini 假设核查
+│   ├── gpt.json            # GPT 框架连接
+│   ├── grok.json           # Grok 盲点扫描
+│   ├── grok_advocate.json  # Grok 魔鬼代言人（针对用户论点）
+│   ├── gemini_rebuttal.json  # (opt-in: --with-rebuttal)
+│   ├── gpt_rebuttal.json     # (opt-in: --with-rebuttal)
+│   ├── grok_rebuttal.json    # (opt-in: --with-rebuttal)
 │   └── decisions.json      # 仲裁决策
 ├── synthesis/              # Grok 综合分析
 │   ├── grok_socratic.json  # 苏格拉底提问
+│   ├── delusion_check.json # 集体谬误检测结果
 │   ├── tensions.json       # 核心张力
 │   ├── user_response.json  # 用户回应
 │   └── evaluation.json     # v1→v2 评估
@@ -183,7 +152,8 @@ data/sessions/{session_id}/
 |-------|------|-----------|
 | Socratic questions | 0.7 | 发散性，问出意想不到的问题 |
 | Research diagnosis | 0.3 | 精准判断，不瞎编研究任务 |
-| Contrarian challenge | 0.7 | 创造性逆向叙事 |
+| Blind spot scan | 0.7 | 创造性盲点发现 |
+| Devil's advocate | 0.7 | 激进对抗，找最致命反论点 |
 | Meta-critique (rebuttal) | 0.5 | 平衡——尖锐但公正 |
 | Synthesis | 0.5 | 准确提炼张力 + 洞察力 |
 | Evaluation | 0.3 | 严谨评分 |
@@ -210,8 +180,8 @@ Grok 的 diagnose 阶段会自动判断需要哪些数据源。
 
 1. **初始想法不需要完整** - 一句话就够，Grok 的 5 个问题会帮你展开
 2. **诚实回答** - 不知道就说不知道，Grok 会把它列入研究清单
-3. **用 `debate.py run` 跑完整辩论** - 并行 + 交叉反驳效果远好于单独调用
-4. **关注 synthesize 输出的 3 个张力** - 这是整个流程最高价值的环节
+3. **用 `debate.py run` 跑协同分析** - 默认无反驳（省成本），仅在争议大的话题加 `--with-rebuttal`
+4. **关注 synthesize 输出的 3 个张力** - 收敛度 > 80% 时会自动注入集体谬误检测
 5. **迭代直到 score ≥ 7** - evaluate 评分 < 7 说明论点还有硬伤
 6. **不要跳过研究诊断** - Grok 的 diagnose 会精确识别你需要补什么数据
 
