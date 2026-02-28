@@ -35,3 +35,10 @@ sellside-tracker/data/*.yaml
 # OS
 .DS_Store
 Thumbs.db
+.fuse_hidden*
+
+# Temp/stray files
+initiate/plan-initiate-review*.md
+
+# AB test data (runtime-generated)
+socratic-writer/data/ab_test*.json
