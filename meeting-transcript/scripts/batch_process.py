@@ -46,6 +46,12 @@ try:
 except ImportError:
     HAS_FRAMEWORK_TAGGER = False
 
+try:
+    from shared.vector_memory import upsert_from_file as vm_upsert
+    HAS_VECTOR_MEMORY = True
+except ImportError:
+    HAS_VECTOR_MEMORY = False
+
 # Load API key
 load_dotenv(Path.home() / "13F-CLAUDE" / ".env")
 api_key = os.environ.get("GEMINI_API_KEY")
@@ -508,6 +514,15 @@ def generate_briefing(cleaned_path: Path, briefing_prompt: str, model: str,
 
     output_path.write_text(frontmatter + result, encoding="utf-8")
     print(f"  Saved: {output_name}")
+
+    # Store in vector memory (non-blocking)
+    if HAS_VECTOR_MEMORY:
+        try:
+            vm_result = vm_upsert(str(output_path))
+            print(f"  Vector memory: {vm_result['inserted']} chunks stored")
+        except Exception as e:
+            print(f"  Vector memory: skipped ({e})")
+
     return True, len(result)
 
 

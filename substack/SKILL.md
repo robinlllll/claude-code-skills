@@ -1,3 +1,8 @@
+---
+name: substack
+description: Sync Substack newsletters into Obsidian with summarization, ticker detection, and excerpts
+---
+
 # Substack RSS to Obsidian
 
 Sync Substack newsletter articles into Obsidian vault with automatic summarization, ticker detection, and copyright-compliant excerpts.

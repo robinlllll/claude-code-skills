@@ -98,10 +98,18 @@ def run(config: dict, dry_run: bool = False, **kwargs) -> dict:
         else:
             positions_without_thesis.append(symbol)
 
+    skipped_past = 0
+
     # Check each thesis
     for thesis in theses:
         ticker = thesis.get("_ticker", "")
         thesis_path = thesis.get("_path", "")
+        thesis_status = thesis.get("thesis_status", "watching")
+
+        # Skip past theses entirely — no monitoring needed
+        if thesis_status == "past":
+            skipped_past += 1
+            continue
 
         # Check if in active portfolio
         pos = None
@@ -152,8 +160,10 @@ def run(config: dict, dry_run: bool = False, **kwargs) -> dict:
             )
 
         # Kill criteria status check
+        # Only enforce 48h discipline violations for active theses
+        # Watching theses: KC checks run but no violation timer
         kc_status = thesis.get("kill_criteria_status")
-        if kc_status == "fail":
+        if kc_status == "fail" and thesis_status == "active":
             fail_at = thesis.get("fail_detected_at")
             hours_since = 999
             if fail_at:
@@ -258,6 +268,7 @@ def run(config: dict, dry_run: bool = False, **kwargs) -> dict:
     result["actions_taken"] = tasks_created
     result["metrics"] = {
         "total_theses": total_theses,
+        "skipped_past": skipped_past,
         "active_positions": active_positions,
         "positions_with_thesis": positions_with_thesis,
         "positions_without_thesis": len(positions_without_thesis),
@@ -292,7 +303,7 @@ if __name__ == "__main__":
 
     print(f"Status: {result['status']}")
     m = result["metrics"]
-    print(f"  Theses: {m['total_theses']}, Active positions: {m['active_positions']}")
+    print(f"  Theses: {m['total_theses']} (skipped {m['skipped_past']} past), Active positions: {m['active_positions']}")
     print(
         f"  P1 violations: {m['p1_violations']}, Stale: {m['stale_kc']}, "
         f"Drawdowns: {m['drawdown_alerts']}, Breaches: {m['invalidation_breaches']}"

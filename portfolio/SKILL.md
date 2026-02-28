@@ -1,6 +1,9 @@
 ---
 name: portfolio
-description: Portfolio Monitor - Open the portfolio dashboard, check positions, trades, and holdings
+description: "Portfolio Monitor - Open the portfolio dashboard, check positions, trades, and holdings. Use when user says 'portfolio', 'positions', 'P&L', '持仓', 'dashboard', or asks to check holdings."
+allowed-tools: "Bash Read Write Edit Glob Grep"
+metadata:
+  version: 1.0.0
 ---
 
 # Portfolio Monitor
@@ -16,6 +19,15 @@ Quick access to the Portfolio Monitor web dashboard.
 - User runs `/portfolio`
 - User wants to open the portfolio site
 - User asks to check portfolio, positions, trades, or holdings
+
+## CRITICAL: File Targeting
+
+The portfolio monitor frontend is served from `static/index_v2.html`, NOT `index.html`.
+Before ANY frontend edit:
+1. Verify the served file: `grep -r "index_v2" app.py` or check the static mount
+2. Always edit `index_v2.html` for the main dashboard
+3. CSS lives in `static/css/main.css`, JS modules in `static/js/`
+4. `index.html` is legacy/unused — never edit it
 
 ## Workflow
 

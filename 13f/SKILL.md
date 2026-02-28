@@ -1,6 +1,8 @@
 ---
 name: 13f
-description: 13F Fund Manager Downloader - Download institutional investor holdings data from SEC EDGAR
+description: "13F Fund Manager Downloader - Download institutional investor holdings data from SEC EDGAR. Use when user says '13F', 'institutional holdings', 'fund manager', 'SEC filing', or asks about hedge fund positions."
+metadata:
+  version: 2.0.0
 ---
 
 # 13F Fund Manager Downloader
@@ -47,78 +49,7 @@ One command runs the full pipeline: Gemini 2-stage → Grok 2-stage → Grok Syn
 | Stage 1 | SUMMARY, PORTFOLIO DNA, CAPITAL FLOW, KEY CHANGES + ATTRIBUTION, THEMES, BOTTOM LINE | "发生了什么" — 描述型 |
 | Stage 2 | LONG-TERM HOLDS, SHORT INFERENCE, CONVICTION SCORECARD, SCENARIO, RESEARCH, BLIND SPOTS | "意味着什么" — 推理型 |
 
-## AI Analysis Workflow
-
-### One-command (recommended)
-```bash
-python ai_analyzer.py MANAGER_FOLDER 2025-Q3 --model all --obsidian
-# Output: gemini vN.md, grok vN.md, synthesis vN.md → all in Obsidian
-```
-
-### Programmatic (from Python / Claude Code)
-```python
-import sys
-sys.path.insert(0, r'C:\Users\thisi\13F-CLAUDE')
-from ai_analyzer import (
-    load_manager_data, get_available_managers,
-    run_two_stage_analysis, find_latest_obsidian_analysis,
-    run_synthesis, save_to_obsidian,
-)
-
-data = load_manager_data('MANAGER_FOLDER', '2025-Q3')
-
-# Step 1-2: Run Gemini + Grok 2-stage
-run_two_stage_analysis(data, model='gemini', obsidian=True, folder_name='MANAGER_FOLDER')
-run_two_stage_analysis(data, model='grok', obsidian=True, folder_name='MANAGER_FOLDER')
-
-# Step 3: Synthesis (reads latest Obsidian outputs)
-manager_name = data.get('name', 'MANAGER_FOLDER')
-gp = find_latest_obsidian_analysis(manager_name, '2025-Q3', 'gemini')
-kp = find_latest_obsidian_analysis(manager_name, '2025-Q3', 'grok')
-run_synthesis(gp.read_text(encoding='utf-8'), kp.read_text(encoding='utf-8'), manager_name, '2025-Q3')
-```
-
-### Generate dashboard chart (optional)
-```python
-from position_chart import generate_dashboard
-generate_dashboard('MANAGER_FOLDER')
-# Saves dashboard.png to manager's Obsidian folder
-```
-
-## CLI Commands
-
-```bash
-# Full 3-step pipeline (recommended): Gemini + Grok + Synthesis → Obsidian
-python ai_analyzer.py BERKSHIRE_HATHAWAY_INC_1067983 2025-Q3 --model all --obsidian
-
-# Single model only (no synthesis)
-python ai_analyzer.py BERKSHIRE_HATHAWAY_INC_1067983 2025-Q3 --model gemini --obsidian
-python ai_analyzer.py BERKSHIRE_HATHAWAY_INC_1067983 2025-Q3 --model grok --obsidian
-
-# Legacy single-stage mode
-python ai_analyzer.py BERKSHIRE_HATHAWAY_INC_1067983 2025-Q3 --model gemini --single-stage
-
-# List available managers
-python ai_analyzer.py --list 2025-Q3
-
-# Cross-holdings analysis (stocks held by 3+ managers)
-python ai_analyzer.py --cross 2025-Q3 --model all
-
-# Build history for all managers (run before analysis)
-python history_builder.py --all
-
-# Generate charts for a manager
-python position_chart.py MANAGER_FOLDER
-```
-
-## AI Analysis Engines
-
-| Engine | Role | API Key |
-|--------|------|---------|
-| Gemini | 量化叙事、配对逻辑 | GEMINI_API_KEY in .env |
-| Grok | 逆向思维、市场结构 + Synthesis | XAI_API_KEY in .env |
-
-**Note:** Claude and ChatGPT models are deprecated for 13F analysis. Use `--model all` (Gemini + Grok + Synthesis).
+For CLI commands, programmatic API, email delivery, and engine details, see `references/cli-and-api.md`.
 
 ## Output Locations
 

@@ -2,7 +2,7 @@
 """
 Save analysis to Obsidian vault with pipeline-specific frontmatter.
 
-Adapts the pattern from organizer-transcript/browser/obsidian.py
+Adapts the pattern from transcript-analyzer/browser/obsidian.py
 with additional fields: pipeline_run, ai_provider, pipeline_batch.
 """
 

@@ -5,6 +5,7 @@ PDF → AI 结构化提取 → YAML 存储 → QoQ 对比
 
 Usage:
     python extract.py "path/to/report.pdf" [--ticker GOOG] [--quarter Q4-2025]
+    python extract.py --history GOOG
 """
 
 import argparse
@@ -12,6 +13,7 @@ import csv
 import json
 import os
 import re
+import sqlite3
 import sys
 from datetime import datetime
 from pathlib import Path
@@ -103,8 +105,7 @@ def load_template(ticker: str) -> list[dict]:
             csv_path = p
             break
     if not csv_path:
-        print(f"Error: No template found for {ticker} (tried: {candidates})", file=sys.stderr)
-        sys.exit(1)
+        return None
     with open(csv_path, "r", encoding="utf-8") as f:
         reader = csv.DictReader(f)
         return [row for row in reader]
@@ -219,6 +220,46 @@ def build_summary_prompt(pdf_text: str, ticker: str, quarter: str) -> str:
 """
 
 
+def build_generic_extraction_prompt(pdf_text: str, ticker: str) -> str:
+    """Generic extraction prompt — no CSV template needed."""
+    return f"""You are a financial data extraction assistant. Extract the following standardized fields from this sell-side research report.
+
+Company: {ticker}
+
+## Extract these fields (JSON format):
+
+{{
+    "ticker": "{ticker}",
+    "date": "YYYY-MM-DD (report date)",
+    "firm": "Brokerage firm name",
+    "analyst": "Lead analyst name",
+    "rating": "Buy/Overweight/Hold/Neutral/Sell/Underweight (exact rating)",
+    "prior_rating": "Previous rating if mentioned, else null",
+    "target_price": numeric value (no currency symbol),
+    "prior_target": numeric value if mentioned, else null,
+    "currency": "USD/HKD/CNY/EUR/GBP",
+    "key_thesis": "1-3 sentence core thesis in English",
+    "catalysts": ["list", "of", "upcoming", "catalysts"],
+    "risks": ["list", "of", "key", "risks"],
+    "estimates": {{
+        "revenue_current_q": "$ value or null",
+        "revenue_next_q": "$ value or null",
+        "eps_current_q": "$ value or null",
+        "eps_next_q": "$ value or null"
+    }}
+}}
+
+## Rules:
+1. Output ONLY valid JSON, no markdown fences
+2. If a field is not found in the report, set it to null
+3. For rating, normalize to: Buy, Overweight, Hold, Neutral, Underweight, Sell
+4. target_price and prior_target should be numeric only (no $ or currency)
+5. key_thesis should capture the analyst's main argument
+
+## Report text:
+{pdf_text}"""
+
+
 def call_gemini(prompt: str) -> str:
     """Call Gemini API for extraction."""
     from google import genai
@@ -324,6 +365,131 @@ def get_previous_quarter(history: dict, current_quarter: str) -> dict | None:
     elif quarters:
         return history[quarters[-1]]
     return None
+
+
+# ── SQLite Views Storage ──────────────────────────────────────────────────────
+
+def _get_views_db() -> sqlite3.Connection:
+    db_path = DATA_DIR / "sellside_views.db"
+    conn = sqlite3.connect(str(db_path))
+    conn.execute("""CREATE TABLE IF NOT EXISTS views (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        ticker TEXT NOT NULL,
+        date TEXT NOT NULL,
+        firm TEXT NOT NULL,
+        analyst TEXT,
+        rating TEXT,
+        prior_rating TEXT,
+        target_price REAL,
+        prior_target REAL,
+        currency TEXT DEFAULT 'USD',
+        key_thesis TEXT,
+        catalysts TEXT,
+        risks TEXT,
+        estimates TEXT,
+        source_file TEXT,
+        created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+        UNIQUE(ticker, date, firm)
+    )""")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_views_ticker ON views(ticker)")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_views_firm ON views(ticker, firm)")
+    conn.commit()
+    return conn
+
+
+def save_view(ticker: str, view: dict, source_file: str = ""):
+    conn = _get_views_db()
+    conn.execute("""INSERT OR REPLACE INTO views
+        (ticker, date, firm, analyst, rating, prior_rating, target_price, prior_target,
+         currency, key_thesis, catalysts, risks, estimates, source_file)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+        (ticker, view.get("date", ""), view.get("firm", ""), view.get("analyst"),
+         view.get("rating"), view.get("prior_rating"),
+         view.get("target_price"), view.get("prior_target"),
+         view.get("currency", "USD"), view.get("key_thesis"),
+         json.dumps(view.get("catalysts", []), ensure_ascii=False),
+         json.dumps(view.get("risks", []), ensure_ascii=False),
+         json.dumps(view.get("estimates", {}), ensure_ascii=False),
+         source_file))
+    conn.commit()
+    conn.close()
+    print(f"[OK] 观点已记录: {ticker} / {view.get('firm', 'N/A')}")
+
+
+def load_views(ticker: str) -> list[dict]:
+    conn = _get_views_db()
+    rows = conn.execute(
+        "SELECT * FROM views WHERE ticker = ? ORDER BY date DESC", (ticker,)
+    ).fetchall()
+    conn.close()
+    cols = ["id", "ticker", "date", "firm", "analyst", "rating", "prior_rating",
+            "target_price", "prior_target", "currency", "key_thesis", "catalysts",
+            "risks", "estimates", "source_file", "created_at"]
+    views = []
+    for row in rows:
+        v = dict(zip(cols, row))
+        try:
+            v["catalysts"] = json.loads(v["catalysts"]) if v["catalysts"] else []
+            v["risks"] = json.loads(v["risks"]) if v["risks"] else []
+            v["estimates"] = json.loads(v["estimates"]) if v["estimates"] else {}
+        except (json.JSONDecodeError, TypeError):
+            pass
+        views.append(v)
+    return views
+
+
+def generate_view_summary(ticker: str) -> str:
+    views = load_views(ticker)
+    if not views:
+        return ""
+    lines = [f"# {ticker} 券商观点汇总", "", f"_最后更新: {datetime.now().strftime('%Y-%m-%d')}_", "",
+             "## 当前共识", "", "| 券商 | 分析师 | 评级 | 目标价 | 最近更新 |",
+             "|------|--------|------|--------|---------|"]
+    for v in views:
+        tp = v.get("target_price")
+        curr = v.get("currency", "USD")
+        tp_str = f"${tp}" if tp and curr == "USD" else f"{tp} {curr}" if tp else "N/A"
+        lines.append(f"| {v.get('firm','N/A')} | {v.get('analyst','N/A')} | {v.get('rating','N/A')} | {tp_str} | {v.get('date','N/A')} |")
+
+    ratings = [v.get("rating", "").lower() for v in views if v.get("rating")]
+    buy = sum(1 for r in ratings if r in ("buy", "overweight"))
+    hold = sum(1 for r in ratings if r in ("hold", "neutral", "equal-weight"))
+    sell = sum(1 for r in ratings if r in ("sell", "underweight"))
+    targets = [v["target_price"] for v in views if v.get("target_price")]
+    avg = sum(targets) / len(targets) if targets else 0
+    lines.extend(["", f"**共识分布:** {buy} Buy / {hold} Hold / {sell} Sell"])
+    if avg:
+        lines.append(f"**平均目标价:** ${avg:.0f}")
+    return "\n".join(lines)
+
+
+def display_history(ticker: str):
+    views = load_views(ticker)
+    if not views:
+        print(f"No analyst views recorded for {ticker}")
+        return
+    print(f"\n{ticker} 券商观点变化")
+    print("\u2501" * 60)
+    print(f"{'日期':<12} {'券商':<12} {'评级变化':<20} {'目标价变化':<16}")
+    print("\u2501" * 60)
+    for v in views:
+        date = v.get("date", "N/A")
+        firm = str(v.get("firm", "N/A"))[:10]
+        rating = v.get("rating", "N/A")
+        prior_r = v.get("prior_rating")
+        rating_str = f"{prior_r} -> {rating}" if prior_r else rating
+        tp = v.get("target_price")
+        prior_tp = v.get("prior_target")
+        tp_str = f"${prior_tp} -> ${tp}" if prior_tp and tp else f"${tp}" if tp else "N/A"
+        print(f"{date:<12} {firm:<12} {rating_str:<20} {tp_str:<16}")
+    print("\u2501" * 60)
+    ratings = [v.get("rating", "").lower() for v in views if v.get("rating")]
+    buy = sum(1 for r in ratings if r in ("buy", "overweight"))
+    hold = sum(1 for r in ratings if r in ("hold", "neutral", "equal-weight"))
+    sell = sum(1 for r in ratings if r in ("sell", "underweight"))
+    targets = [v["target_price"] for v in views if v.get("target_price")]
+    avg = sum(targets) / len(targets) if targets else 0
+    print(f"共识: {buy} Buy / {hold} Hold / {sell} Sell  平均目标价: ${avg:.0f}")
 
 
 # ── QoQ Comparison ───────────────────────────────────────────────────────────
@@ -511,14 +677,127 @@ def detect_quarter_from_filename(filename: str) -> str | None:
     return None
 
 
+def save_generic_to_obsidian(ticker: str, view: dict, report_summary: str, source_file: str = ""):
+    """Save generic (no-template) extraction result to Obsidian vault."""
+    today = datetime.now().strftime("%Y-%m-%d")
+    firm = view.get("firm", "Unknown")
+    report_date = view.get("date", today)
+
+    catalysts = view.get("catalysts", [])
+    risks = view.get("risks", [])
+    estimates = view.get("estimates", {})
+
+    cat_lines = "\n".join(f"- {c}" for c in catalysts) if catalysts else "_未提及_"
+    risk_lines = "\n".join(f"- {r}" for r in risks) if risks else "_未提及_"
+
+    est_lines = []
+    if estimates:
+        for k, v in estimates.items():
+            if v:
+                est_lines.append(f"- {k}: {v}")
+    est_block = "\n".join(est_lines) if est_lines else "_未提及_"
+
+    rating = view.get("rating", "N/A")
+    prior_r = view.get("prior_rating")
+    rating_display = f"{prior_r} -> {rating}" if prior_r else rating
+
+    tp = view.get("target_price")
+    prior_tp = view.get("prior_target")
+    curr = view.get("currency", "USD")
+    tp_display = f"{prior_tp} -> {tp} {curr}" if prior_tp and tp else f"{tp} {curr}" if tp else "N/A"
+
+    body = f"""## 核心观点摘要
+
+{report_summary.strip() if report_summary else "_AI摘要未生成_"}
+
+---
+
+## 评级 & 目标价
+
+| 项目 | 值 |
+|------|-----|
+| 评级 | {rating_display} |
+| 目标价 | {tp_display} |
+| 分析师 | {view.get('analyst', 'N/A')} |
+| 报告日期 | {report_date} |
+
+## 核心论点
+
+{view.get('key_thesis', '_未提取_')}
+
+## 催化剂
+
+{cat_lines}
+
+## 风险
+
+{risk_lines}
+
+## 预估数据
+
+{est_block}
+
+---
+
+_来源: {firm} | 提取时间: {today}_
+"""
+
+    frontmatter = {
+        "tags": ["卖方跟踪", ticker],
+        "ticker": ticker,
+        "firm": firm,
+        "rating": rating,
+        "target_price": tp,
+        "currency": curr,
+        "report_date": report_date,
+        "date": today,
+    }
+    fm_yaml = yaml.dump(frontmatter, allow_unicode=True, default_flow_style=False).strip()
+    content = f"---\n{fm_yaml}\n---\n\n# {ticker} 卖方观点 — {firm} ({report_date})\n\n{body}"
+
+    rel_path = f"研究/卖方跟踪/{ticker}/{today} {ticker} {firm} 卖方观点.md"
+    full_path = VAULT / rel_path
+    full_path.parent.mkdir(parents=True, exist_ok=True)
+    with open(full_path, "w", encoding="utf-8") as fh:
+        fh.write(content)
+    print(f"[OK] Obsidian 笔记已保存: {rel_path}")
+
+    # Update summary note
+    summary_content = generate_view_summary(ticker)
+    if summary_content:
+        summary_path = VAULT / f"研究/卖方跟踪/{ticker}/{ticker} 券商观点汇总.md"
+        with open(summary_path, "w", encoding="utf-8") as fh:
+            fh.write(summary_content)
+        print(f"[OK] 汇总笔记已更新: 研究/卖方跟踪/{ticker}/{ticker} 券商观点汇总.md")
+
+    try:
+        update_dashboard()
+        print("[OK] Dashboard 已更新")
+    except Exception as e:
+        print(f"[WARN] Dashboard 更新失败: {e}")
+
+    return full_path
+
+
 def main():
-    parser = argparse.ArgumentParser(description="Sellside Report Tracker — Phase 0")
-    parser.add_argument("pdf", help="Path to sellside report (PDF or PPTX)")
+    parser = argparse.ArgumentParser(description="Sellside Report Tracker")
+    parser.add_argument("pdf", nargs="?", help="Path to sellside report (PDF or PPTX)")
     parser.add_argument("--ticker", help="Ticker symbol (auto-detected if omitted)")
     parser.add_argument("--quarter", help="Quarter like Q4-2025 (auto-detected if omitted)")
     parser.add_argument("--no-obsidian", action="store_true", help="Skip Obsidian save")
     parser.add_argument("--dry-run", action="store_true", help="Extract only, don't save")
+    parser.add_argument("--history", metavar="TICKER", help="Display view history for a ticker")
     args = parser.parse_args()
+
+    # ── History mode ──────────────────────────────────────────────────────────
+    if args.history:
+        display_history(args.history.upper())
+        return
+
+    # ── Require PDF arg when not in history mode ──────────────────────────────
+    if not args.pdf:
+        print("Error: PDF path required (or use --history TICKER)", file=sys.stderr)
+        sys.exit(1)
 
     pdf_path = args.pdf
     if not os.path.exists(pdf_path):
@@ -532,37 +811,107 @@ def main():
     if not ticker:
         print("Error: Cannot detect ticker. Use --ticker GOOG", file=sys.stderr)
         sys.exit(1)
+
+    ticker = ticker.upper()
+    print(f"[PDF] {Path(pdf_path).name}")
+    print(f"[Ticker] {ticker}" + (f" | Quarter: {quarter}" if quarter else ""))
+
+    # ── Try to load CSV template ───────────────────────────────────────────────
+    fields = load_template(ticker)
+
+    # ── Extract PDF text (common to both modes) ───────────────────────────────
+    print("[...] 提取文本...")
+    pdf_text = extract_file_text(pdf_path)
+    page_count = pdf_text.count("[PAGE ")
+    print(f"    {page_count} 页，{len(pdf_text)} 字符")
+
+    # ══════════════════════════════════════════════════════════════════════════
+    # GENERIC MODE — no CSV template found
+    # ══════════════════════════════════════════════════════════════════════════
+    if fields is None:
+        if not quarter:
+            quarter = "unknown"
+        print(f"[INFO] 未找到 {ticker} 的 CSV 模板，启用通用提取模式")
+        print("[...] 调用 Gemini: 通用结构化提取...")
+        generic_prompt = build_generic_extraction_prompt(pdf_text, ticker)
+        raw_json = call_gemini(generic_prompt)
+        print(f"    [OK] 通用提取完成")
+
+        # Parse JSON response — strip fences if present
+        cleaned_json = raw_json.strip()
+        if cleaned_json.startswith("```"):
+            cleaned_json = re.sub(r"^```\w*\n?", "", cleaned_json)
+            cleaned_json = re.sub(r"\n?```$", "", cleaned_json)
+
+        try:
+            view = json.loads(cleaned_json)
+        except json.JSONDecodeError as e:
+            print(f"[ERR] JSON 解析失败: {e}", file=sys.stderr)
+            print("--- Raw response (first 2000 chars) ---")
+            print(raw_json[:2000])
+            sys.exit(1)
+
+        print(f"    firm={view.get('firm','?')} | rating={view.get('rating','?')} | TP={view.get('target_price','?')}")
+
+        if args.dry_run:
+            print("\n[DRY RUN] 完成，未保存数据")
+            print(json.dumps(view, ensure_ascii=False, indent=2))
+            return
+
+        # Save view to SQLite
+        save_view(ticker, view, source_file=str(pdf_path))
+
+        # Generate narrative summary
+        print("[...] 调用 Gemini: 生成叙事摘要...")
+        # Use a lightweight generic summary prompt
+        summary_prompt = f"""你是一位资深买方分析师。请将以下卖方报告转化为简洁的投资笔记（中文，Markdown 格式）。
+
+涵盖：核心观点、主要业务进展、估值逻辑、风险提示。
+保留具体数字，标注来源页码如 (p.5)。
+
+## 报告全文
+{pdf_text}"""
+        report_summary = call_gemini(summary_prompt)
+        print(f"    [OK] 摘要完成 ({len(report_summary)} chars)")
+
+        # Save to Obsidian + update summary note
+        if not args.no_obsidian:
+            note_path = save_generic_to_obsidian(ticker, view, report_summary, source_file=str(pdf_path))
+
+        # Vector memory upsert
+        try:
+            sys.path.insert(0, str(Path.home() / ".claude" / "skills"))
+            from shared.vector_memory import upsert_from_file
+            if not args.no_obsidian:
+                upsert_from_file(str(note_path))
+                print("[OK] Vector memory 已更新")
+        except Exception as e:
+            print(f"[WARN] Vector memory 更新失败: {e}")
+
+        print(f"\n[DONE] 通用提取完成 | {ticker} / {view.get('firm', 'N/A')}")
+        return
+
+    # ══════════════════════════════════════════════════════════════════════════
+    # TEMPLATE MODE — CSV template found (existing flow, preserved unchanged)
+    # ══════════════════════════════════════════════════════════════════════════
     if not quarter:
         print("Error: Cannot detect quarter. Use --quarter Q4-2025", file=sys.stderr)
         sys.exit(1)
 
-    ticker = ticker.upper()
-    print(f"📄 PDF: {Path(pdf_path).name}")
-    print(f"🏷️  Ticker: {ticker} | Quarter: {quarter}")
-
-    # Load template
-    fields = load_template(ticker)
-    print(f"📋 模板: {len(fields)} 个指标 ({TEMPLATES_DIR / f'{ticker.lower()}.csv'})")
-
-    # Extract PDF text
-    print("📖 提取 PDF 文本...")
-    pdf_text = extract_file_text(pdf_path)
-    page_count = pdf_text.count("[PAGE ")
-    print(f"   {page_count} 页，{len(pdf_text)} 字符")
+    print(f"[Template] {len(fields)} 个指标 ({TEMPLATES_DIR / f'{ticker.lower()}.csv'})")
 
     # Build prompt & call AI — two calls: KPI extraction + full summary
     fields_text = template_to_prompt_fields(fields)
     prompt = build_extraction_prompt(pdf_text, fields_text, ticker, quarter)
     summary_prompt = build_summary_prompt(pdf_text, ticker, quarter)
-    print(f"🤖 调用 Gemini: KPI 提取 + 全文摘要...")
+    print("[...] 调用 Gemini: KPI 提取 + 全文摘要...")
     raw_response = call_gemini(prompt)
-    print(f"   ✅ KPI 提取完成")
-    print(f"   📝 生成全文摘要中...")
+    print("    [OK] KPI 提取完成")
+    print("    [...] 生成全文摘要中...")
     report_summary = call_gemini(summary_prompt)
-    print(f"   ✅ 全文摘要完成 ({len(report_summary)} chars)")
+    print(f"    [OK] 全文摘要完成 ({len(report_summary)} chars)")
 
-    # Parse YAML response
-    # Strip markdown code fence if present
+    # Parse YAML response — strip markdown code fence if present
     cleaned = raw_response.strip()
     if cleaned.startswith("```"):
         cleaned = re.sub(r"^```\w*\n?", "", cleaned)
@@ -571,7 +920,7 @@ def main():
     try:
         data = yaml.safe_load(cleaned)
     except yaml.YAMLError as e:
-        print(f"❌ YAML 解析失败: {e}", file=sys.stderr)
+        print(f"[ERR] YAML 解析失败: {e}", file=sys.stderr)
         print("--- Raw response ---")
         print(raw_response[:2000])
         sys.exit(1)
@@ -580,7 +929,7 @@ def main():
     metrics = data.get("metrics", {})
     filled = sum(1 for m in metrics.values() if m and m.get("value") is not None)
     total = len(fields)
-    print(f"✅ 提取完成: {filled}/{total} 指标已填充")
+    print(f"[OK] 提取完成: {filled}/{total} 指标已填充")
 
     # Load history & validate
     history = load_history(ticker)
@@ -588,7 +937,7 @@ def main():
     warnings = validate_extraction(data, fields, prev)
 
     if warnings:
-        print(f"\n⚠️ {len(warnings)} 个警告:")
+        print(f"\n[WARN] {len(warnings)} 个警告:")
         for w in warnings:
             print(f"  {w}")
 
@@ -606,7 +955,7 @@ def main():
     print(f"{'─' * 60}")
 
     if args.dry_run:
-        print("\n🏁 Dry run 完成，未保存数据")
+        print("\n[DRY RUN] 完成，未保存数据")
         return
 
     # Save to history
@@ -621,7 +970,7 @@ def main():
     if not args.no_obsidian:
         save_to_obsidian(data, comparison, fields, report_summary)
 
-    print(f"\n🏁 完成！{filled}/{total} 指标 | {len(warnings)} 警告")
+    print(f"\n[DONE] 完成！{filled}/{total} 指标 | {len(warnings)} 警告")
 
 
 if __name__ == "__main__":

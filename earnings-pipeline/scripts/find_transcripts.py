@@ -2,7 +2,7 @@
 """
 Find earnings transcript PDFs and create per-ticker manifest JSON files.
 
-Reuses indexer.scan_transcripts() from organizer-transcript skill.
+Reuses indexer.scan_transcripts() from transcript-analyzer skill.
 """
 
 import sys
@@ -17,9 +17,9 @@ sys.stderr.reconfigure(encoding="utf-8")
 # Add skills to path for imports
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
 
-# Import indexer from organizer-transcript
+# Import indexer from transcript-analyzer
 ORGANIZER_DIR = (
-    Path(__file__).resolve().parent.parent.parent / "organizer-transcript" / "browser"
+    Path(__file__).resolve().parent.parent.parent / "transcript-analyzer" / "browser"
 )
 sys.path.insert(0, str(ORGANIZER_DIR))
 from indexer import scan_transcripts, TRANSCRIPTS_ROOT

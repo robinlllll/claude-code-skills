@@ -739,7 +739,7 @@ def main():
     # review
     s = sub.add_parser("review", help="Send to Gemini + GPT for dual review")
     s.add_argument("--session", required=True, help="Session ID")
-    s.add_argument("--model", default="gemini-2.5-flash", help="Gemini model")
+    s.add_argument("--model", default="gemini-3-pro-preview", help="Gemini model")
     s.add_argument("--gpt-model", default="gpt-5.2-chat-latest", help="GPT model")
     s.add_argument("--no-gpt", action="store_true", help="Skip GPT review")
     s.add_argument("--test-report", help="Path to test report file")

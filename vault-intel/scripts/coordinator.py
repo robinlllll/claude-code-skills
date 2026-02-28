@@ -73,6 +73,7 @@ def run_agent(
         "linker": "agent_linker",
         "killcriteria": "agent_killcriteria",
         "13f_delta": "agent_13f_delta",
+        "vector_memory": "agent_vector_memory",
         "briefing": "agent_briefing",
     }
 
@@ -157,6 +158,12 @@ def print_summary(results: dict):
                 f"      Links: {metrics.get('links_added', 0)}, "
                 f"Narratives: {metrics.get('narrative_changes', 0)}"
             )
+        elif name == "vector_memory":
+            print(
+                f"      New: {metrics.get('inserted', 0)}, "
+                f"Skipped: {metrics.get('skipped', 0)}, "
+                f"Total: {metrics.get('total_embeddings', '?')}"
+            )
         elif name == "briefing":
             print(
                 f"      Health: {metrics.get('health_score', '?')}/100, "
@@ -238,11 +245,12 @@ def main(args: list[str] = None):
 
         # STAGE 2: INTELLIGENCE (parallel — vault is now stable)
         print("\n>>> Stage 2: Intelligence Agents (parallel)")
-        with ThreadPoolExecutor(max_workers=3) as pool:
+        with ThreadPoolExecutor(max_workers=4) as pool:
             futures = {
                 pool.submit(run_agent, "linker", config, dry_run): "linker",
                 pool.submit(run_agent, "killcriteria", config, dry_run): "killcriteria",
                 pool.submit(run_agent, "13f_delta", config, dry_run): "13f_delta",
+                pool.submit(run_agent, "vector_memory", config, dry_run): "vector_memory",
             }
             for future in as_completed(futures):
                 name = futures[future]

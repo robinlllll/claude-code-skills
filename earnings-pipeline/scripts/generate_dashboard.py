@@ -60,6 +60,43 @@ def load_results(run_dir: Path) -> list[dict]:
     return results
 
 
+def normalize_scores(r: dict) -> dict:
+    """Normalize validation_scores from various agent output formats into a consistent dict."""
+    # Try validation_scores first, then validation
+    scores = r.get("validation_scores") or r.get("validation") or {}
+
+    # If it's a string, parse what we can
+    if isinstance(scores, str):
+        parsed = {}
+        import re as _re
+        m = _re.search(r"sections.*?(\d+)/(\d+)", scores)
+        if m:
+            parsed["sections_found"] = int(m.group(1))
+            parsed["sections_total"] = int(m.group(2))
+        m = _re.search(r"citations:\s*(\d+)", scores)
+        if m:
+            parsed["citations"] = {"total_citations": int(m.group(1))}
+        m = _re.search(r"(\d+)\s*unique\s*pages", scores)
+        if m:
+            parsed.setdefault("citations", {})["unique_pages"] = int(m.group(1))
+        m = _re.search(r"qa_questions:\s*(\d+)", scores)
+        if m:
+            parsed["qa_questions"] = int(m.group(1))
+        return parsed
+
+    if not isinstance(scores, dict):
+        return {}
+
+    # Handle flat format (citations as int instead of nested dict)
+    if "citations" in scores and isinstance(scores["citations"], int):
+        scores["citations"] = {
+            "total_citations": scores["citations"],
+            "unique_pages": scores.get("unique_pages", "?"),
+        }
+
+    return scores
+
+
 def generate_dashboard(results: list[dict], quarter: str, run_dir: Path) -> str:
     """Generate dashboard markdown content."""
     now = datetime.now()
@@ -68,7 +105,7 @@ def generate_dashboard(results: list[dict], quarter: str, run_dir: Path) -> str:
     run_id = run_dir.name
 
     # Count statuses
-    success_count = sum(1 for r in results if r.get("status") == "success")
+    success_count = sum(1 for r in results if r.get("status") in ("success", "completed"))
     failed_count = sum(1 for r in results if r.get("status") in ("failed", "error"))
     stalled_count = sum(1 for r in results if r.get("status") == "stalled")
     total = len(results)
@@ -99,10 +136,10 @@ tags: [earnings-pipeline, dashboard, {quarter.replace(' ', '-')}]
     for r in results:
         ticker = r.get("ticker", r["_dir"])
         status = r.get("status", "unknown")
-        status_icon = {"success": "✅", "failed": "❌", "error": "❌", "stalled": "⏳"}.get(status, "❓")
+        status_icon = {"success": "✅", "completed": "✅", "failed": "❌", "error": "❌", "stalled": "⏳"}.get(status, "❓")
 
-        if status == "success":
-            scores = r.get("validation_scores", {})
+        if status in ("success", "completed"):
+            scores = normalize_scores(r)
             ai_provider = "claude+gemini" if r.get("gemini_status") == "success" else "claude"
             sections = f"{scores.get('sections_found', '?')}/{scores.get('sections_total', '?')}"
             citations = scores.get("citations", {})
@@ -126,7 +163,7 @@ tags: [earnings-pipeline, dashboard, {quarter.replace(' ', '-')}]
     lines.append("")
 
     # Summaries section
-    successful = [r for r in results if r.get("status") == "success"]
+    successful = [r for r in results if r.get("status") in ("success", "completed")]
     if successful:
         lines.append("## Key Findings Summary")
         lines.append("")
@@ -141,12 +178,23 @@ tags: [earnings-pipeline, dashboard, {quarter.replace(' ', '-')}]
         lines.append("## Quality Metrics")
         lines.append("")
 
-        avg_chars = sum(r.get("validation_scores", {}).get("total_chars", 0) for r in successful) / len(successful)
-        avg_citations = sum(
-            r.get("validation_scores", {}).get("citations", {}).get("total_citations", 0)
-            for r in successful
-        ) / len(successful)
-        avg_qa = sum(r.get("validation_scores", {}).get("qa_questions", 0) for r in successful) / len(successful)
+        def _get_total_chars(r):
+            s = normalize_scores(r)
+            return s.get("total_chars", 0) if isinstance(s, dict) else 0
+        def _get_total_cites(r):
+            s = normalize_scores(r)
+            c = s.get("citations", {})
+            if isinstance(c, dict):
+                return c.get("total_citations", 0)
+            elif isinstance(c, int):
+                return c
+            return 0
+        def _get_qa(r):
+            s = normalize_scores(r)
+            return s.get("qa_questions", 0) if isinstance(s, dict) else 0
+        avg_chars = sum(_get_total_chars(r) for r in successful) / len(successful)
+        avg_citations = sum(_get_total_cites(r) for r in successful) / len(successful)
+        avg_qa = sum(_get_qa(r) for r in successful) / len(successful)
         gemini_success = sum(1 for r in successful if r.get("gemini_status") == "success")
 
         lines.append(f"- **Avg analysis length:** {avg_chars:,.0f} chars")

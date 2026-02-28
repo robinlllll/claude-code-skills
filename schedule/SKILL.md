@@ -11,11 +11,26 @@ Interactive weekly planning: gather context (tasks, calendar, thesis, pipeline) 
 
 - `~/.claude/skills/shared/week_planner.py` — data gathering + scheduling
 - `~/.claude/skills/shared/task_manager.py` — `scheduled_date` column + 7 week functions
+- `~/.claude/skills/shared/gcal.py` — Google Calendar API integration
+
+## Google Calendar Setup (one-time)
+
+```bash
+# 1. Authenticate (opens browser for OAuth)
+cd ~/.claude/skills && python shared/gcal.py auth
+
+# 2. Test connectivity
+cd ~/.claude/skills && python shared/gcal.py test
+```
+
+Requires `shared/data/credentials.json` from Google Cloud Console (Calendar API enabled, OAuth Desktop app).
+Token auto-refreshes after first auth. If not authenticated, falls back to `.ics` files only.
 
 ## Syntax
 
 ```
 /schedule plan              Full interactive planning session
+/schedule dashboard         Generate unified visual dashboard (replaces dashboard.html)
 /schedule today             Today's scheduled tasks + calendar events
 /schedule status            Current week progress (done vs remaining)
 /schedule reschedule        Mid-week interactive replanning
@@ -23,6 +38,38 @@ Interactive weekly planning: gather context (tasks, calendar, thesis, pipeline) 
 ```
 
 ## Instructions for Claude
+
+### `/schedule dashboard` — Generate Visual Dashboard
+
+Generates a unified scheduling dashboard HTML file with week/day/month views, task sidebar, and auto-scheduling.
+
+Calendar events are loaded from Google Calendar API (if authenticated) + local `.ics` files in `~/CALENDAR-CONVERTER/`.
+
+#### Step 1: Run the dashboard generator (single command)
+
+```bash
+cd ~/.claude/skills && /c/Users/thisi/AppData/Local/Python/pythoncore-3.14-64/python.exe shared/dashboard_generator.py generate \
+    --week-start YYYY-MM-DD \
+    --output C:\Users\thisi\dashboard.html
+```
+
+Use Monday of the current week for `--week-start`.
+
+The generator will:
+- Auto-detect `.ics` files in `~/CALENDAR-CONVERTER/` and parse events for the target week
+- Load tasks from `task_manager.db`
+- Auto-schedule tasks into free calendar slots
+- Inject everything into the HTML template
+
+**Optional overrides:**
+- `--ics-dir PATH` — Use a different directory for `.ics` files
+- `--calendar-json 'JSON'` — Pass calendar events as JSON directly (bypasses .ics parsing)
+
+#### Step 2: Confirm to user
+
+> "Dashboard generated at dashboard.html with N calendar events + M scheduled tasks. Open it from your file browser."
+
+---
 
 ### `/schedule plan` — Full Interactive Planning
 
@@ -65,6 +112,73 @@ Ask the user:
 > (e.g., "Wednesday PM is blocked", "focus on AMAT", "keep Friday light")
 
 Wait for user response. Do NOT proceed without input.
+
+#### Step 3b: Earnings Week Protocol
+
+When context shows portfolio tickers reporting this week, run the earnings protocol **during Step 3 discussion**:
+
+**1. Extract earnings times from calendar context:**
+The `week_planner.py context` output includes `raw.calendar_events` with per-day events. Filter for portfolio tickers to get exact release and call times:
+```python
+# From context JSON
+cal = context['raw']['calendar_events']
+portfolio_tickers = set(context['raw']['portfolio_tickers'])
+for date in sorted(cal.keys()):
+    for evt in cal[date]:
+        ticker = evt.get('ticker', '')
+        if ticker in portfolio_tickers:
+            # evt has: time, summary, category (e.g. "Earnings Release", "Earnings Call"), ticker
+            # Use these to build .ics reminders + analysis blocks
+```
+Key categories: `Earnings Release` (release time), `Earnings Call` (call time + duration ~1h).
+Time values: `"06:00"`, `"16:00"`, `"09:00"` (TIME TBD = placeholder, usually before/after market).
+
+**2. Check portfolio weights:**
+```python
+import json
+with open(r'C:\Users\thisi\PORTFOLIO\portfolio_monitor\data\portfolio_data.json', 'r', encoding='utf-8') as f:
+    data = json.load(f)
+positions = data['positions']
+total_mv = sum(abs(float(p.get('market_value_native', 0)) * float(p.get('fx_rate', 1))) for p in positions)
+# Calculate % for each earnings ticker
+```
+
+**2. Apply the >3% call listening rule:**
+- Positions >3% of NAV → block 1h for listening to earnings call
+- Positions <3% → no call listening by default
+- User can override and choose to listen to any call regardless of weight
+
+**3. Handle call time conflicts:**
+When two calls overlap (same timeslot):
+- Ask user which to listen **live** vs follow via **live transcript**
+- Live call: block 1h with 5min-before alarm
+- Live transcript: add a **15min-after-start** reminder (not a full block)
+
+**4. Build .ics calendar events for each portfolio earnings ticker:**
+
+| Event Type | Timing | Duration | Alarm |
+|------------|--------|----------|-------|
+| Release reminder | Release time | 5min | **5min before** |
+| Call listen block | Call time (if listening) | 60min | 5min before |
+| Live transcript reminder | Call start + 15min | 5min | at event time |
+| Analysis block | Call end + 2h | **30min** | 5min before |
+
+- After-market calls (17:00): analysis blocks land at 19:00 same evening (user can shift to next morning)
+- Before-market calls: analysis blocks land same day mid-morning
+- No call scheduled: analysis block = release time + 4h
+
+**5. Create prep tasks:**
+For each portfolio ticker reporting this week:
+- P1 task if position has thesis or is major holding
+- P2 task for smaller positions
+- Schedule prep task on the **day before** earnings (via `--earnings` flag)
+- Estimated time: 30-45min for P1 (45m for top holdings like NVDA), 20min for P2
+
+**6. Trim stale rollover tasks:**
+If prior weeks left P3 peer/upstream/downstream earnings tasks:
+- Keep only tasks where the **reviewed ticker itself** is in the current portfolio
+- Delete tasks where the ticker is NOT in portfolio (just a peer of a holding)
+- Check portfolio membership against `portfolio_data.json` positions list
 
 #### Step 4: Python generates schedule
 
@@ -127,11 +241,22 @@ from shared.week_planner import generate_week_markdown
 generate_week_markdown(week_start, context, schedule_result, focus_note="user's priorities")
 ```
 
-3. **Generate merged .ics:**
-```python
-from shared.week_planner import generate_week_ics
-generate_week_ics(week_start, schedule_result['schedule'], context['raw']['calendar_events'])
-```
+3. **Generate .ics** — Two options:
+
+   **a) If no earnings this week** (simple):
+   ```python
+   from shared.week_planner import generate_week_ics
+   generate_week_ics(week_start, schedule_result['schedule'], context['raw']['calendar_events'])
+   ```
+
+   **b) If earnings week** (enhanced — build ICS directly with earnings events):
+   Generate a full .ics file with VALARM reminders using Python's string building:
+   - Release reminders: 5min-before alarm for each portfolio earnings release
+   - Call listen blocks: 1h events for calls user chose to listen to
+   - Live transcript reminders: events at call_start + 15min for conflicting calls
+   - Analysis blocks: 30min events at call_end + 2h with 5min alarm
+   - Use `TZID=America/New_York` and proper VTIMEZONE block
+   - Save to `CALENDAR-CONVERTER/schedule_plan_YYYY-MM-DD.ics`
 
 4. Report what was saved:
    - `写作/周计划/YYYY-MM-DD_week_plan.md`

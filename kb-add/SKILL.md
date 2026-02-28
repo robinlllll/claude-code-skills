@@ -1,3 +1,8 @@
+---
+name: kb-add
+description: "将研究资料导入知识库：提取文本、识别 ticker、生成摘要、归档到 Obsidian。Use when user says 'import', '入库', 'save to vault', 'add to knowledge base', or has a document/article to archive. NOT for researching a ticker (use /research)."
+---
+
 # /kb-add — 知识库文档入库
 
 将任意格式的研究资料一键导入知识库：提取文本、识别 ticker、标记分析维度、生成摘要、归档到 Obsidian。
@@ -33,10 +38,30 @@
 1. 判断 URL 类型：
    - 微信文章 → 提示使用 `/wechat-hao`
    - Substack → 提示使用 substack_fetcher
-   - 其他 → 运行：
+   - 其他 → 优先用 defuddle（更干净、省 token），fallback 到 trafilatura：
      ```bash
+     # 首选：defuddle（去除导航/广告/杂质，输出干净 markdown）
+     defuddle parse "URL" --md -o /tmp/kb_article.md && cd ~/.claude/skills && /c/Users/thisi/AppData/Local/Python/pythoncore-3.14-64/python.exe shared/kb_ingestion.py ingest "/tmp/kb_article.md" --org "URL"
+     ```
+     ```bash
+     # 回退：trafilatura（defuddle 未安装或失败时）
      cd ~/.claude/skills && /c/Users/thisi/AppData/Local/Python/pythoncore-3.14-64/python.exe shared/kb_ingestion.py url "URL"
      ```
+   - 安装 defuddle: `npm install -g defuddle-cli`
+   - 提取元数据: `defuddle parse "URL" -p title` / `-p description` / `-p domain`
+
+### Browser Capture Mode
+
+`/kb-add --browser`
+
+Captures the currently active Chrome tab content:
+1. Reads current tab via Chrome MCP (`get_page_text`)
+2. Auto-detects source platform (Bloomberg, WSJ, FT, etc.)
+3. Runs standard ingestion pipeline (ticker detection → summary → Obsidian)
+4. Auto-upserts to vector memory
+
+**Supported premium sources:** Bloomberg, WSJ, FT, Reuters, Barron's
+**Fallback:** Any webpage works — classified as `source_platform: "web"`
 
 ## 执行步骤（search / stats）
 
@@ -66,5 +91,6 @@ cd ~/.claude/skills && /c/Users/thisi/AppData/Local/Python/pythoncore-3.14-64/py
 - `shared/framework_tagger.py` — 框架维度标记
 - `shared/task_manager.py` — knowledge_index 表
 - `pdfplumber` — PDF 文本提取
-- `trafilatura` — 网页文本提取（URL 模式）
+- `defuddle-cli` — 首选网页提取（npm, 更干净，省 token）
+- `trafilatura` — 回退网页文本提取（URL 模式）
 - `google.genai` — Gemini 摘要生成（可选，失败时 fallback）

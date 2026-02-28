@@ -1,85 +1,38 @@
-# cross-13f lessons
+# Lessons Learned
 
-## 2026-02-10: Canonical tickers vs market tickers
-- GroupAnalyzer returns canonical names from SecurityMaster (e.g., BRIDGEBIO, IMMUNOVANT, NEKTAR, UNIQURE)
-- These are NOT the standard market tickers (BBIO, IMVT, NKTR, QURE)
-- PMRecommender resolves canonical names correctly — pass them directly, don't convert to market tickers
-- Only exception: ABIVAX works as both canonical and market ticker
+## 2026-02-12 | 2026-02-12: Q4 early filer analysis
+- GroupAnalyzer returns EMPTY consensus_buys/sells when coverage < ~30% (breadth thresholds don't trigger). For thin coverage, do manual aggregate analysis directly from full_data JSON files.
+- full_data JSON structure: 'latest_holdings' (not 'holdings'), 'sold_positions' at top level. Holdings have 'portfolio_pct', 'share_change_pct' (can be None), 'is_new', 'issuer_name', 'cusip'.
+- CredibilityResult uses 'name' not 'manager_name'.
+- DigitalBridge (CIK 1679688) has 165 holdings with many sub-entity duplicates (same stock 3-4x). Need to aggregate.
+- Proem Advisors Q4 filing has ALL positions marked NEW — likely first-time 13F filer. Treat with caution.
+- Candlestick Capital Q4: 0 holdings (liquidated 49 positions). Exclude from sell signals.
+- Summit Partners: PE holdings (Klaviyo 58%). Not actionable for HF signals. Exclude from screening.
+- CN_PM geo-discount: behavioral scoring works without implied_returns (warning only, not error).
+- Encoding: use io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8') for Windows Python output with unicode.
 
-## 2026-02-10: Performance
-- Full pipeline (21 managers, 8 tickers, 4 with LLM): ~5 minutes total
-- Stage 1 (GroupAnalyzer): ~5s
-- Stage 2 (8x PMRecommender): ~30s sequential, could parallelize
-- Stage 3 (4x LLM dual-model): ~3 minutes (Gemini + GPT in parallel per ticker)
-- LLM is the bottleneck; use --no-llm for quick screens
+## 2026-02-17 | 2026-02-17: Q4 full pipeline run. GroupAnalyzer returns dicts (not dataclasses) for consensus_buys/new_names/research_triggers. new_names uses initiators (int) and actions (list of dicts). research_triggers uses buyers/sellers as lists (not int counts). Recommendation dataclass: holding.portfolio_pct (not .portfolio_pct), .template (not .question_type), holding.first_quarter_owned for tenure. 23/26 Biotech managers filed Q4 (missing: Great Point, Orbimed, Janus Henderson). Checkpoint Capital only 7 holdings (ultra-concentrated). ABVX is the only Consensus High-Conviction name (4 top-Q holders >3% each).
 
-## 2026-02-10: BT-7 CN Manager Geo-Discount
-- CN_PM managers' portfolio_pct in 13F reflects only US equity sleeve, not total AUM
-- BT-7 tested discount factors 0.0→1.0 on forward returns (Oct-Dec 2025, 3,114 signals)
-- CN fresh hit rate 50.0% vs US 56.7% — direction signals weaker
-- CW portfolio return monotonically decreases with CN weight (d=0.0: +10.54%, d=1.0: +9.75%)
-- **Conclusion: GEO_DISCOUNT_FACTOR = 0.0** — zero out position-size bonus, keep action signals (new/add/sell)
-- Applied in both pm_recommender.py and group_analyzer.py
-- CN_PM group defined in pm_groups.yaml (17 members)
-- Aspex (HK) and MayTech are Asia-based but NOT in CN_PM — monitor separately
+## 2026-02-18 | 2026-02-18: Full 9-group pipeline run with Phase 3 backtest rules
+- All 9 groups now have group-specific backtest rules in references/backtest-rules.md (was only 3: Biotech/TMT/Energy)
+- Updated rules matrix: Fresh-EW (Biotech, CN_PM, TMT, Generalist), Fresh-CW (Healthcare, Consumer), Deep-EW (Financials, Real_Estate), Deep-CW (Energy)
+- BT-5 Consensus/Variant: 5 Consensus (TMT, Healthcare, Generalist, Consumer, Real_Estate), 4 Variant (Biotech, CN_PM, Financials, Energy)
+- Phase 3 flipped 3 groups vs behavioral-only: CN_PM to Variant, Generalist to Consensus, Real_Estate to Consensus
+- Full pipeline (Stage 0+1+2 for 9 groups) best run as 3 parallel subagents of 3 groups each. Total time ~10min.
+- GroupAnalyzer returns dicts not dataclasses. consensus_buys/new_names/research_triggers are lists of dicts.
+- PMRecommender.recommend() and .save_obsidian() work per-ticker. Run top 8 tickers per group for Stage 2.
+- Output: 9 individual opportunity reports at cross-analysis/{GROUP}_2025-Q3_opportunities.md + unified ALL_GROUPS report + ~72 per-ticker recommender notes
+- Financials (5 members) and Real_Estate (10 members, Sharpe 0.58) have weakest signals. Flag caveats prominently.
+- Energy Goodlander concentration: 11-position portfolio, single-manager variant picks can dominate (BE +253%, WULF +161% in Q3 2025).
 
-## 2026-02-10: MUST apply backtest findings (GROUP-SPECIFIC)
-- The pipeline must ALWAYS incorporate backtest findings — but rules differ by group!
-- BT-1: Top-quartile threshold = top 25% by credibility score
-- Fresh vs Deep is GROUP-SPECIFIC (NOT universal): Biotech/TMT = Fresh first, Energy = Deep first
-
-### Biotech-specific rules:
-- BT-4: EW > CW (Sharpe 2.44 vs 1.01) → do NOT weight by credibility. Credibility is display-only badge
-- BT-5: Variant > Consensus (+3.2%/qtr alpha) → scan variant positions separately, surface as highest-priority section
-- Variant positions are NOT captured by GroupAnalyzer screen — must do a separate holdings scan
-- Caligan Partners has the most differentiated portfolio (6 variant names in top-10)
-- ABIVAX is the only ticker that qualifies as CONSENSUS among top-Q managers
-
-### TMT-specific rules (2026-02-11 backtest):
-- BT-4: CW-Hybrid > EW (Sharpe 0.79 vs 0.61) → USE credibility weighting for TMT ticker ranking
-- BT-4 Fresh vs Deep: Fresh-CW Sharpe 1.48 > Deep-EW 1.46 > Deep-CW 1.42 > Fresh-EW 1.40
-  - Fresh > Deep confirmed for TMT (excess +4.69% vs +3.73%), but gap smaller than Biotech
-  - Fresh-CW is the optimal TMT strategy (CW weighting + Fresh signal selection)
-  - Fresh wins 5/8 quarters; Deep wins in down-markets (2024-Q3 drawdown)
-- BT-5: Consensus > Variant (+4.98% vs +1.59%/qtr) → prioritize consensus screen, variant is lower priority
-- Top-Q overlap (behavioral vs hybrid): only 65% — hybrid scoring materially changes TMT rankings
-- Hybrid scoring adds more value for TMT because more performance data is available (longer track records)
-
-## 2026-02-11: TMT cross-13f execution
-- TMT has 50 managers (vs 26 Biotech) — GroupAnalyzer and variant scan both produce much more data
-- TMT top-Q threshold: 60.6 (13 managers), lower spread than Biotech due to hybrid scoring compressing range
-- GroupAnalyzer `new_names` has different structure than `consensus_buys`: `actions` is a list not dict, count field is `initiators`
-- For TMT, pass ticker symbols directly to PMRecommender (MDB, SNPS, etc.) — they're already market tickers unlike Biotech canonical names
-- Exception: Alphabet must be passed as "Alphabet Inc" (canonical name) — GOOGL resolves but saves as "ALPHABET INC"
-- Light Street Capital appears across 6/10 screened tickers — highest cross-coverage manager for TMT meetings
-- Strategy Capital has extremely concentrated positions (AXON 20.5%, SHOP 17.9%, NET 16.5%) — outlier conviction
-- Appaloosa LP (David Tepper) has 15.6% BABA held 12Q — deep macro conviction on China TMT not in typical TMT group
-- Running 10 PMRecommender calls in 2 parallel batches (5 each) takes ~40s vs ~100s sequential
-- Hybrid credibility badges now show in all recommender output — score_dict() auto-loads all group perf data
-
-### Energy-specific rules (2026-02-11 backtest):
-- BT-4: **Deep >> Fresh** — OPPOSITE of Biotech/TMT!
-  - Deep-CW cumulative +104.1% vs Fresh-EW +49.1% (12 quarters)
-  - Deep-CW avg +6.49%/qtr, excess +5.11% vs XLE
-  - CW adds ~0.55%/qtr over EW for both signal types
-  - Explanation: Energy is asset-heavy, relationship-driven — deep knowledge of assets persists longer
-- BT-5: **Variant >> Consensus** (similar to Biotech)
-  - Variant avg excess +7.63%/qtr vs Consensus +1.14%/qtr
-  - BUT Variant volatility 18.37% vs Consensus 4.25% — much lumpier returns
-  - Top-third threshold used (not top-quartile) for small groups < 12 managers
-  - pm_backtest.py patched: _get_top_quartile_ciks ensures min 3 CIKs for small groups
-- Energy meeting priority: rank by ExpVal (stock picking quality), not credibility
-  - Goodlander (+22.11% ExpVal) > Hill City (+12.54%) > Merewether (+1.17%)
-  - Credibility ≠ stock picking skill in Energy group
-- pm_backtest.py parameterized: BT4/BT5 now accept group= arg (default "Biotech")
-  - BENCHMARK_MAP: Biotech→XBI, TMT→XLK, Energy→XLE, Healthcare→XLV, Financials→XLF
-  - save_obsidian_bt4/bt5 also accept group= for correct file naming
-
-## 2026-02-11: Energy cross-13f execution
-- Energy has 7 managers (6 active, Oceanic inactive since Q3 2018)
-- Top-Q threshold: 61.1 (2 managers: Merewether 61.5, Yaupon 61.1)
-- Goodlander and Hill City have best stock-level skill but lower credibility — meeting priority should follow ExpVal not credibility
-- Variant scan: zero overlap between Merewether and Yaupon at >3% weight — every position is variant
-- FSLR is the strongest consensus signal: 5/6 PMs hold, all fresh
-- Merewether utility rotation (ETR, SRE, NVT, XEL, NI) is the strongest thematic signal
-- VST highest divergence: Goodlander 22% vs Merewether selling from 7.3%
+## 2026-02-25 | Verdad purity filter + insider overlay implementation
+- **BT-5 purity filter flips Biotech from Variant→Consensus.** With `--purity 0.5` (specialist >50% biotech allocation), Consensus excess +12.84%/qtr vs Variant +1.73%. Robust across trimming (Trim-2 Sharpe 1.64 vs 0.45, win rate 75%).
+- **Even without purity filter**, Variant's mean edge is a "mean-driven illusion" — median (+3.37% vs +0.62%) and win rate (67%) favor Consensus. Extreme quarters (2023-Q1 +37%, 2025-Q2 +44%) inflate Variant's average.
+- **Expanded group (Healthcare crossovers) provides <1% marginal improvement.** Not worth the complexity. Default: purity only, no expanded.
+- **Biotech universe construction via SIC codes:** SEC EDGAR SIC codes 2833-2836 are the anchor. data.sec.gov DNS can fail — code needs graceful fallback to cached universe.
+- **Lazy imports required:** Project linter strips unused top-level imports. Use `import yaml` / `from sec_client import SECClient` inside method bodies.
+- **insider_signals.py:** Form 4 XML parsing works but SEC rate limits aggressively. 0.15s sleep between requests. Cache with 7-day TTL at `output/_insider_cache.json`.
+- **Verdad insider hierarchy:** CFO open-market buys (+40 score) > C-suite (+20 each, max +60) > Board (ignored) > CEO (=noise). Filter out 10b5-1 planned trades via footnote detection.
+- **Form 4 XML fetch bug (fixed):** `primary_document` field is often `xslF345X05/form4.xml` (XSLT-rendered HTML), not the raw XML. Fix: strip prefix and fetch bare filename `form4.xml` at the accession root. Without this fix, all XML fetches silently fail (no `<ownershipDocument>` in HTML response) → every ticker scores 0.
+- **Title normalization gap (fixed):** Original regex only matched specific C-suite titles (COO, CTO, CMO, CSO, CCO). Missed "Chief Strategy Officer", "Chief Legal Officer", "Chief People Officer", etc. Fix: use `chief\s+\w+` pattern instead. Order matters — CFO and CEO regexes are checked first so they still match before the generic `chief` pattern.
+- **Live test results:** Large-cap biotechs (MRNA, IONS, ALNY) are almost exclusively insider selling (options exercise). CFO buying is genuinely rare — SAVA was the only hit in 8 tickers tested (CSUITE buy, score=20). This confirms Verdad's thesis that CFO purchase is an anomaly signal.

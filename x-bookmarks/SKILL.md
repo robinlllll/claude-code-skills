@@ -1,3 +1,8 @@
+---
+name: x-bookmarks
+description: Import X (Twitter) bookmarks into Obsidian notes with AI analysis
+---
+
 # X.com Bookmarks to Obsidian
 
 Import X (Twitter) bookmarks exported via the [twitter-web-exporter](https://github.com/prinsss/twitter-web-exporter) Chrome extension into Obsidian notes. Also supports saving individual tweets by URL.

@@ -1,6 +1,8 @@
 ---
 name: telegram
-description: Telegram Bot - Unified mobile entry point for investment workflow. Smart routing for photos, URLs, PDFs, text. Ticker detection + Gemini analysis + Obsidian save.
+description: "Telegram Bot - Unified mobile entry point for investment workflow. Smart routing for photos, URLs, PDFs, text. Ticker detection + Gemini analysis + Obsidian save. Use when user says 'start bot', 'telegram', 'run bot', or needs to manage the Telegram bot."
+metadata:
+  version: 1.0.0
 ---
 
 # Telegram Bot — 统一移动入口
@@ -48,6 +50,14 @@ cd "C:\Users\thisi\Screenshots" && start run_bot_hidden.vbs
 | `/size TICKER` | Position sizing |
 | `/dj` | Decision journal |
 | `/sync` | IBKR sync |
+
+## Task Dispatch Tiers
+
+| Tier | Commands | Mechanism |
+|------|----------|-----------|
+| Tier 1 | /task, /plan, /brief, /coverage, /rq | Direct import — runs immediately |
+| Tier 2 | Push notifications | Via `shared/telegram_notify.py` |
+| Tier 3 | /do (custom tasks) | Inline keyboard → SQLite queue for later processing |
 
 ## Content Routing
 

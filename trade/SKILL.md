@@ -3,16 +3,12 @@ name: trade
 description: "Trade Logger - Log trades with execution details, thesis links, and risk management. Use when user says 'log trade', 'BUY', 'SELL', 'SHORT', 'COVER', '记录交易', or mentions executing a trade."
 allowed-tools: "Bash Read Write Edit Glob Grep"
 metadata:
-  version: 1.0.0
+  version: 2.0.0
 ---
 
-# Trade Logger
+# Trade Logger (Script-Driven)
 
-Quick trade logging during market hours with minimal friction. Logs trades as markdown files with automatic position context.
-
-## Project Location
-
-`C:\Users\thisi\PORTFOLIO`
+Quick trade logging during market hours with minimal friction. Deterministic Python script handles all logic.
 
 ## Syntax
 
@@ -28,141 +24,98 @@ Quick trade logging during market hours with minimal friction. Logs trades as ma
 - `/trade ADD TSM 200 @ 330 "Buying the dip"`
 - `/trade TRIM NVDA 100 @ 145 "Reducing position size"`
 
-## Quick Mode Workflow
+## Workflow (3 Steps)
 
-This is a **quick mode** skill - minimal questions, maximum speed.
+### Step 1: Parse Input
 
-### 1. Parse Trade Details
+Extract from user command:
+- **ACTION:** BUY / SELL / SHORT / COVER / ADD / TRIM
+- **TICKER:** Stock symbol (uppercase)
+- **QTY:** Number of shares (numeric)
+- **PRICE:** Execution price (numeric)
+- **REASON:** Quoted reason text (may be empty)
 
-Extract from command:
-- ACTION: BUY/SELL/SHORT/COVER/ADD/TRIM
-- TICKER: Stock symbol
-- QTY: Number of shares
-- PRICE: Execution price
-- REASON: Why this trade (the quoted text)
-
-### 2. Fetch Current Position
+### Step 2: Execute Script
 
 ```bash
-curl -s http://localhost:8000/api/portfolio
+/c/Users/thisi/AppData/Local/Python/pythoncore-3.14-64/python.exe \
+  "C:\Users\thisi\.claude\skills\trade\scripts\trade_logger.py" \
+  {ACTION} {TICKER} {QTY} {PRICE} --reason "{REASON}"
 ```
 
-From the response, find the ticker and extract:
-- Current shares held
-- Average cost basis
-- Market value
-- Total portfolio NAV
+The script handles everything deterministically:
+1. Fetches portfolio data (graceful fallback if API unavailable)
+2. Calculates trade total, % of NAV, new position
+3. Creates trade .md file in `PORTFOLIO/decisions/trades/`
+4. Updates thesis.md Position History (if exists)
+5. Auto-transitions thesis.yaml status (BUY/ADD → active, full SELL/COVER → past)
+6. Records to SQLite (`~/.claude/data/investments.db`)
+   - Includes sector metadata: `entity_dictionary[ticker].get('sector', 'Unknown')` stored in DecisionRecord for downstream `/review` sector-grouped analysis
+7. Creates follow-up task via task_manager
+8. Prints JSON confirmation to stdout
 
-Calculate:
-- Trade total value: `qty * price`
-- % of NAV: `(trade_total / nav) * 100`
-- New position size after trade
+### Step 3: Present Results
 
-### 3. Check for Existing Thesis
+Parse the JSON stdout from the script. Display confirmation:
 
-Look for: `C:\Users\thisi\PORTFOLIO\research\companies\{TICKER}\thesis.md`
-
-- If thesis exists: Link to it in the trade log
-- If NO thesis for BUY/SHORT: Add a warning note (but still log the trade)
-
-### 4. Create Trade Log
-
-**File:** `C:\Users\thisi\PORTFOLIO\decisions\trades\{YYYY-MM-DD}_{ACTION}_{TICKER}.md`
-
-If a file with that name already exists (multiple trades same day), append a sequence number:
-- `2026-01-27_BUY_TSM.md` (first trade)
-- `2026-01-27_BUY_TSM_2.md` (second trade same day)
-
-### 5. Update Thesis Position History (if exists)
-
-If thesis file exists, append an entry to the Position History table.
-
-### 5.5. Record Decision to SQLite
-
-After logging the trade file and updating thesis, record the decision in the investments database:
-
-```python
-import sys
-sys.path.insert(0, r'C:\Users\thisi\.claude\skills\shared')
-from schemas import DecisionRecord
-from db_utils import init_db, insert_decision
-
-init_db()  # ensures table exists
-
-record = DecisionRecord(
-    date="{YYYY-MM-DD}",          # today's date
-    ticker="{TICKER}",
-    decision_type="{action}",      # map: BUY→buy, SELL→sell, ADD→add, TRIM→trim, SHORT→buy, COVER→sell
-    reasoning="{REASON}",          # the quoted reason from user's command
-    conviction=conviction,         # from thesis.yaml conviction field, default 5 if not found
-    thesis_link="PORTFOLIO/research/companies/{TICKER}/thesis.md",
-    trigger="{trigger}",           # infer from context: "earnings" if post-earnings, "thesis" if thesis-driven, "other" default
-)
-decision_id = insert_decision(record)
+```
+✓ Logged: {ACTION} {QTY} {TICKER} @ ${PRICE} (${TOTAL})
+  Position after: {SHARES} shares ({PCT}% of NAV)
+  Thesis: {status} | Conviction: {N}/10
+  Decision ID: {first 8 chars}
 ```
 
-- Add `decision_id: {UUID}` to the trade .md file's frontmatter
-- Display in confirmation: `Decision ID: {first 8 chars}`
-- If db write fails: log warning but do NOT block the trade log (trade file is the primary record)
-
-### 6. Thesis Status Auto-Transition
-
-After logging the trade and updating thesis.md, check thesis.yaml for status transitions:
-
-1. Read `thesis.yaml` for the ticker (if it exists, skip silently if not)
-2. Get current `thesis_status` (default: none → skip)
-
-**If ACTION is BUY, LONG, or ADD:**
-- If `thesis_status` is `watching` or `past` → update to `active`
-- Set `status_changed_at` to today, `status_reason` to "Auto: Position opened via /trade"
-- Log: "Thesis status: {old} → active (auto-transition)"
-
-**If ACTION is SELL or COVER:**
-- Check if full exit: remaining shares == 0 OR user explicitly says "全部", "full exit", "清仓"
-- If full exit AND `thesis_status` is `active` → update to `past`
-- Set `status_changed_at` to today, `status_reason` to "Auto: Full position exit"
-- Log: "Thesis status: active → past (auto-transition)"
-- If PARTIAL exit (TRIM or shares remaining > 0) → do NOT change status
-
-Write changes to thesis.yaml using `yaml.dump(data, f, default_flow_style=False, allow_unicode=True, sort_keys=False)`.
-
-### 7. Confirm to User
-
-Display a brief confirmation:
+If `thesis.status_changed` is true:
 ```
-✓ Logged: BUY 100 TSM @ $332.71 ($33,271)
-  Position after: 8,900 shares (15.55% of NAV)
-  Thesis: Linked ✓
-  Status: watching → active (auto)
+  Status: {old} → {new} (auto)
 ```
 
-See `references/trade-template.md` for template and calculation formulas.
+If there are warnings, display them.
 
-See `references/post-trade-checks.md` for auto-checks, decision journal, and reflection questions.
+Then append reflection questions (T1-T3 from `shared/reflection_questions.yaml`):
 
-## If No Position Data Available
+> **T1:** 这笔交易的 thesis 和我上次更新 thesis 时相比，有新信息吗？还是纯粹情绪驱动？
+> **T2:** 如果这笔交易亏损 20%，我的反应会是加仓还是止损？现在就想清楚。
+> **T3:** 谁在卖出？为什么他们认为是卖出的好时机？我是那个 'sucker at the table' 吗？
 
-If the portfolio API is unavailable or ticker not found:
-- Still create the trade log
-- Leave position fields as "N/A"
-- Note: "Position data unavailable - update manually"
+**T4 (Sector-Specific, optional):**
+Based on the resolved sector, add one targeted reflection question:
 
-## For Exit Trades (SELL/COVER/TRIM)
+| Sector | T4 Question |
+|--------|-------------|
+| Semiconductors | "What stage of the inventory cycle are we in? Am I buying into a downcycle?" |
+| SaaS / Cloud | "What is the NRR trend — expanding or compressing? Does this entry assume re-acceleration?" |
+| Consumer Staples | "Is volume growth positive? Am I relying on pricing that may face elasticity limits?" |
+| Financials | "Where are we in the credit cycle? Is NIM expanding or compressing?" |
+| Healthcare | "What is the next binary catalyst (trial readout, FDA date)? Is the risk/reward asymmetric?" |
+| Tobacco / Nicotine | "Is the RRP transition thesis intact? Volume decline rate accelerating or stable?" |
+| Industrials | "Is book-to-bill > 1.0? Am I entering with backlog visibility or hoping for orders?" |
+| Energy | "Am I making a commodity price bet or a company-specific bet? What's the breakeven?" |
 
-When logging exits, the trade log should note:
-- Shares sold
-- Remaining position (if any)
-- Calculate realized P&L if average cost is known
+Display after T1-T3. User can skip. T4 is logged but not required.
 
-## Output Files
+**Sector Context (display only, non-blocking):**
+After trade confirmation, append a one-line sector context:
+> "📊 Sector: {sector} — Primary KPIs to monitor: {top 2-3 sector KPIs from sector_metrics.yaml}"
+>
+> Example: "📊 Sector: Semiconductors — Monitor: GM%, Inventory Days, Data Center Revenue %"
 
-- `decisions/trades/{YYYY-MM-DD}_{ACTION}_{TICKER}.md` - Trade log
-- Updates `research/companies/{TICKER}/thesis.md` - Position history (if exists)
+Resolution: `entity_dictionary.yaml[TICKER].sector` → `sector_metrics.yaml[sector].canonical_kpis` (top 3 by importance).
+
+For exit trades (SELL/COVER/TRIM), also suggest:
+```
+考虑更新 thesis: `/thesis {TICKER} update "Exited — {REASON}"`
+```
 
 ## Important Notes
 
-- **No questions asked** - just parse and log
-- **Speed is priority** - market hours, need quick logging
+- **No questions asked** — just parse and log
+- **Speed is priority** — market hours, need quick logging
 - Risk fields (stop/target) left blank for manual fill later
-- Thesis creation is separate - use `/thesis {TICKER}` command
-- Decision Journal is separate - handled by Telegram Nightly Check (10 PM)
+- Decision Journal is separate — handled by Telegram Nightly Check (10 PM)
+- If script fails, check stderr and report the error
+
+## References
+
+- `references/trade-template.md` — template format and calculation formulas
+- `references/post-trade-checks.md` — post-trade logic and auto-checks

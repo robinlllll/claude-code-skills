@@ -61,11 +61,28 @@ After reading a report, mark questions with `- [?] Your question here` anywhere 
 - SEC EDGAR (10-K annual + 10-Q quarterly XBRL, 8-K filings) + yfinance (price, financials, info)
 - 7-day TTL cache in `runs/_cache/`
 
+#### Sector-Aware Query Enhancement
+
+After resolving the ticker's sector from `entity_dictionary.yaml` → `sector_metrics.yaml`:
+1. Load `research_queries` from `sector_metrics.yaml[sector]` (4 sector-specific queries)
+2. Add these as queries 17-20 in the data collection batch
+3. These target the sector's canonical KPIs that generic queries may miss
+
+**Example — Semiconductors:**
+- Q17: "{TICKER} revenue by end market data center AI automotive industrial"
+- Q18: "{TICKER} inventory levels days and channel inventory trends"
+- Q19: "SEMI book to bill and wafer fab equipment spending"
+- Q20: "{TICKER} competitive positioning process node technology roadmap"
+
 ### Phase 2A: Sections S1-S3 dual-model + S4-S7 single (10 parallel calls)
 - S1-S3 → **BOTH Gemini AND GPT** in parallel (6 calls), then Claude merges best-of-both
 - S4-S7 → Single provider: GPT (S4,S5,S7) / Gemini (S6)
 - S1-S3 are **Knowledge-led** — model training knowledge is primary, data pack is supplementary
 - S4-S7 are **Data-led** — SEC EDGAR + yfinance are primary sources
+
+**S4 Sector Injection:**
+When generating S4, prepend to the section prompt:
+> "This is a {sector} company. In addition to standard financial analysis, specifically address these sector-canonical KPIs: {sector_kpis_list}. For each, provide: current value, trend, peer comparison, and forward outlook. Use the `beat_miss_guide` from sector_metrics.yaml as quality benchmarks."
 
 ### Phase 2A2: Claude Merge (3 parallel calls)
 - For each of S1-S3, Claude synthesizes Gemini + GPT outputs into a unified section
@@ -74,8 +91,25 @@ After reading a report, mark questions with `- [?] Your question here` anywhere 
 ### Phase 2B: Red Team (Grok)
 - Adversarial review of all 7 merged sections, tags claims [DATA PACK]/[MODEL KNOWLEDGE]/[CONFLICT]
 
+**Sector-Specific Red Team Checks:**
+Include in the adversarial prompt:
+> "Cross-check the following sector-specific claims against available data:
+> - For Semiconductors: Are inventory and book-to-bill claims consistent with SEMI Association data?
+> - For Consumer Staples: Are volume vs. pricing claims consistent with category scanner data?
+> - For Financials: Are credit quality trends consistent with Fed/FDIC aggregate data?
+> - For Healthcare: Are pipeline success probability assumptions realistic vs. industry base rates?"
+
 ### Phase 2C: Synthesis S8-S9 (Claude)
 - Incorporates red team findings into final investment conclusion and research gaps
+
+**Sector-Appropriate Valuation (S8):**
+Use `sector_metrics.yaml[sector].valuation_methods` to determine:
+- `primary`: Main valuation methodology for the target price
+- `secondary`: Cross-check methodologies
+- `peer_multiples`: Which multiples to include in the comps table
+
+Example: For a SaaS company, primary = EV/NTM Revenue, with EV/ARR and P/FCF cross-checks.
+For a bank, primary = P/TBV (ROTCE-adjusted), with P/E cross-check.
 
 ## Output
 

@@ -37,7 +37,7 @@ class GeminiClient:
     def __init__(
         self,
         api_key: Optional[str] = None,
-        model: str = "gemini-2.5-flash",
+        model: str = "gemini-3-pro-preview",
         timeout: Optional[int] = None,
     ):
         # Official SDK reads from GEMINI_API_KEY env var by default
@@ -46,7 +46,7 @@ class GeminiClient:
         if self.api_key:
             client_kwargs["api_key"] = self.api_key
         if timeout:
-            client_kwargs["http_options"] = genai_types.HttpOptions(timeout=timeout)
+            client_kwargs["http_options"] = genai_types.HttpOptions(timeout=timeout * 1000)
         self.client = genai.Client(**client_kwargs)
         self.model = model
 

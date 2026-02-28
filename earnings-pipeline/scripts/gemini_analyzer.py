@@ -20,7 +20,12 @@ sys.stderr.reconfigure(encoding="utf-8")
 
 # Load .env file
 def load_env():
-    for env_path in [Path.home() / ".env", Path(__file__).parent / ".env"]:
+    for env_path in [
+        Path.home() / ".env",
+        Path(__file__).parent / ".env",
+        Path.home() / "Screenshots" / ".env",
+        Path.home() / "13F-CLAUDE" / ".env",
+    ]:
         if env_path.exists():
             with open(env_path, encoding="utf-8") as f:
                 for line in f:
@@ -40,7 +45,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
 
 # Import prompt template
 PROMPT_DIR = (
-    Path(__file__).resolve().parent.parent.parent / "organizer-transcript" / "prompts"
+    Path(__file__).resolve().parent.parent.parent / "transcript-analyzer" / "prompts"
 )
 sys.path.insert(0, str(PROMPT_DIR))
 from prompt_claude import get_claude_prompt

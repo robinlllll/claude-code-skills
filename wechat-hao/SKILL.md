@@ -1,3 +1,8 @@
+---
+name: wechat-hao
+description: Export WeChat articles to Notion and Obsidian with AI-powered analysis
+---
+
 # 微信公众号文章导出 (WeChat Article Exporter)
 
 Export WeChat articles to Notion and Obsidian with AI-powered analysis.

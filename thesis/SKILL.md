@@ -222,15 +222,61 @@ Extract for this ticker:
      - Count types: must have ≥2 with `type: quantitative` AND ≥1 with `type: qualitative`
      - If type mix requirement not met → prompt user to add the missing type
    - Also ask for 2-3 key peers (ticker + relationship)
+
+### Step 4a: Sector-Aware KC Suggestions
+
+Before prompting user for kill criteria, load sector templates:
+1. Resolve sector: `entity_dictionary.yaml[TICKER].sector` → `sector_metrics.yaml` sector
+2. Load `suggested_kill_criteria` from `shared/references/sector_metrics.yaml[sector]`
+3. Present sector-suggested KCs as starting templates:
+
+> **Suggested Kill Criteria for {sector}:**
+> Based on sector framework (`shared/references/sector_metrics.yaml`):
+> 1. {KC1 condition} — threshold: {threshold}, source: {data_source}
+> 2. {KC2 condition} — threshold: {threshold}, source: {data_source}
+> 3. {KC3 condition} — threshold: {threshold}, source: {data_source}
+>
+> Adopt, modify, or add custom KCs. At minimum 2 KCs required.
+
+4. Pre-populate `data_source` and `expected_by` fields from the sector template
+5. User can accept, modify, or reject any suggested KC
+
+4.5. **Falsifiability Validation (auto)**
+   For each kill criterion just defined, verify:
+   - Can you name a **specific data source** where evidence would appear? (e.g., "10-Q filing", "monthly channel check", "earnings call")
+   - Can you name a **specific timeframe** when you'd expect to see it? (e.g., "next quarterly earnings", "within 6 months")
+   If either is missing, prompt: "This KC may be unfalsifiable. Consider: what data, from where, by when, would prove this wrong?"
+   Record `data_source` and `expected_by` fields in thesis.yaml for each KC.
+
+   When validating falsifiability, use sector_metrics.yaml `data_source` hints:
+   - For each KC, verify the `data_source` is specific and available
+   - Cross-check against sector_metrics.yaml suggested sources
+   - Example: A Semiconductor KC about "inventory days" should cite "Balance sheet, earnings call" not just "quarterly filing"
 5. Create thesis.md from template (include NLM attribution fields in frontmatter)
 6. **Create thesis.yaml** with kill_criteria, peers, supply_chain, quality_grade, idea_source
 7. Pre-fill with portfolio data if position exists
 
 ### 5. Update Subcommand
 
-If `/thesis {TICKER} update "{note}"`:
-- Add entry to Thesis Log table with today's date
-- Confirm update
+**Syntax:** `/thesis TICKER update "note"`
+
+When updating a thesis with new information:
+
+1. Read existing thesis.md and thesis.yaml
+2. Ask structured questions (use AskUserQuestion):
+   - **Data point:** What happened? (free text — the note from command)
+   - **Thesis impact:** Which pillar does this affect? Options: [list pillars from thesis.yaml] + "None / General"
+   - **Impact direction:** Strengthens ↑ / Neutral ↔ / Weakens ↓
+   - **Action taken:** No change / Increase position / Trim / Exit / Add to watchlist
+   - **Updated conviction:** 1-5 (show current conviction from thesis.yaml)
+3. Append structured entry to thesis.md Thesis Log table:
+
+| Date | Data Point | Pillar Affected | Impact | Action | Conviction |
+|------|-----------|-----------------|--------|--------|------------|
+| 2026-02-27 | Q4 beat, 22% growth | Revenue growth | ↑ Strengthens | No change | 4→4 |
+
+4. Update thesis.yaml: `conviction`, `updated_date`
+5. If impact direction is "Weakens" → suggest running `/thesis TICKER check` to verify kill criteria
 
 ### 6. Set-Status Subcommand
 

@@ -1,11 +1,35 @@
+---
+name: earnings-pipeline
+description: "Batch earnings transcript analysis with dual-AI (Claude + Gemini/GPT) for multiple tickers. Use when user says 'earnings pipeline', '批量分析', or mentions 2+ tickers for earnings analysis. Min 2 tickers required. For single ticker use /transcript-analyzer."
+---
+
 # Earnings Pipeline — Batch Transcript Analysis with Dual-AI
 
 ## When to Use
 
 - User says "earnings pipeline", "批量分析", or mentions 2+ tickers with a quarter for earnings analysis
-- If only 1 ticker → route to `/organizer-transcript` instead
+- If only 1 ticker → route to `/transcript-analyzer` instead
 
-## Pre-flight (Steps 1-4)
+## Pre-flight (Steps 0-4)
+
+### Step 0: API Key Validation (MANDATORY)
+
+Before any other step, verify ALL AI provider API keys are loaded and functional:
+
+```python
+import sys
+sys.path.insert(0, r'C:\Users\thisi\.claude\skills')
+from shared.preflight import validate_api_keys
+
+results = validate_api_keys()
+# Returns dict: {"gemini": True/False, "openai": True/False, "xai": True/False}
+# If ANY key fails, STOP and report to user before proceeding.
+```
+
+If any key fails validation:
+- Report which providers failed
+- Ask user: "Continue with available providers only, or fix keys first?"
+- Do NOT silently fall back to Claude-only mode
 
 ### Step 1: Parse tickers
 
@@ -42,6 +66,20 @@ Run:
 
 This creates `manifest_{TICKER}.json` per ticker in the run directory. Check output for errors — if a ticker has no transcript PDFs found, report it to the user and ask if they want to proceed without it.
 
+**Sector Field in Manifest:**
+When building the manifest for each ticker, add:
+```json
+{
+  "ticker": "NVDA",
+  "sector": "Semiconductors",
+  "sector_framework": "Semiconductors",
+  "sector_kpis": ["Revenue by End Market", "GM%", "Inventory Days", "Lead Times", "Book-to-Bill"],
+  "...existing fields...": "..."
+}
+```
+
+Resolution: `entity_dictionary.yaml[ticker].sector` → `sector_metrics.yaml` sector → load `canonical_kpis` names where `importance: primary`.
+
 ### Step 4: Load insights
 
 Run:
@@ -71,7 +109,7 @@ Launch one `Task` sub-agent per ticker, all in parallel (up to 5 concurrent). Us
 You are analyzing an earnings transcript as part of a batch pipeline. Follow these steps exactly. Do not ask for user confirmation at any step. Proceed automatically.
 
 MANIFEST: Read the manifest file at: {manifest_path}
-It contains: ticker, company, quarter, prev_quarter, curr_pdf, prev_pdf, workdir, insights
+It contains: ticker, company, quarter, prev_quarter, curr_pdf, prev_pdf, workdir, insights, sector, sector_framework, sector_kpis
 
 STEP 1 — Read manifest
 Read {manifest_path} to get all paths and context.
@@ -88,6 +126,11 @@ This writes gemini_output.md to the ticker's workdir. Allow up to 5 minutes time
 STEP 4 — Read Gemini output
 Read {workdir}/gemini_output.md. If the file starts with "STATUS: FAILED", note "Gemini unavailable" and proceed with Claude-only analysis (skip the divergence section later).
 
+STEP 4B — Inject sector context
+After reading the Gemini output (or noting its failure), read `sector`, `sector_framework`, and `sector_kpis` from the manifest. Append the following to your analysis prompt context before producing the unified analysis:
+
+> "Sector context: {ticker} is classified as {sector_framework}. Apply sector-specific KPI analysis per `shared/references/sector_metrics.yaml`. Primary KPIs to track: {sector_kpis_list}. Flag any primary KPI that is [NOT DISCLOSED] in the transcript."
+
 STEP 5 — Produce unified analysis
 You must use this exact prompt template to structure your analysis. Import it:
 
@@ -100,7 +143,7 @@ The analysis prompt template requires 7 sections:
 6. 季度间主题演变 (Thematic Evolution)
 7. 前次 Insight 验证追踪 (Prior Insight Tracking) — only if insights provided
 
-Read the prompt template at: C:/Users/thisi/.claude/skills/organizer-transcript/prompts/prompt_claude.py
+Read the prompt template at: C:/Users/thisi/.claude/skills/transcript-analyzer/prompts/prompt_claude.py
 Use the get_claude_prompt() function's output as your structural guide. Fill in the company name, ticker, current quarter, previous quarter.
 
 If insights were provided in the manifest, include Section 7 (Prior Insight Tracking).
@@ -185,6 +228,16 @@ Once all tickers are complete (or max retries exhausted), run:
 
 Report the dashboard path and a summary table to the user.
 
+**Sector-Aware Dashboard:**
+In the cross-ticker summary table, add a "Sector KPI" column showing the single most important sector-canonical metric and its value from each analysis:
+
+| Ticker | Sector | EPS Beat/Miss | Rev Beat/Miss | Key Sector KPI | Rating |
+|--------|--------|---------------|---------------|----------------|--------|
+| NVDA | Semi | +12% beat | +8% beat | DC Rev +78% QoQ | Bull |
+| PM | Tobacco | +3% beat | In-line | ZYN Vol +35% YoY | Neutral |
+
+Each sub-agent's `result.json` should include a `key_sector_kpi` field (metric name + value) for the dashboard to populate this column.
+
 ## Output Format
 
 Present final results as:
@@ -192,11 +245,11 @@ Present final results as:
 ```
 ## Earnings Pipeline Complete
 
-| Ticker | Status | AI Provider | Sections | Citations | Path |
-|:---|:---|:---|:---|:---|:---|
-| HOOD-US | ✅ | claude+gemini | 7/7 | 45 | [[HOOD-US Q4 2025 vs Q3 2025 Analysis]] |
-| META-US | ✅ | claude+gemini | 7/7 | 52 | [[META-US Q4 2025 vs Q3 2025 Analysis]] |
-| GOOGL-US | ⚠️ | claude-only | 6/7 | 38 | [[GOOGL-US Q4 2025 vs Q3 2025 Analysis]] |
+| Ticker | Sector | Status | AI Provider | Sections | Citations | Key Sector KPI | Path |
+|:---|:---|:---|:---|:---|:---|:---|:---|
+| HOOD-US | Fintech | Done | claude+gemini | 7/7 | 45 | MAUs +18% YoY | [[HOOD-US Q4 2025 vs Q3 2025 Analysis]] |
+| META-US | Social Media | Done | claude+gemini | 7/7 | 52 | DAU/MAU 68% | [[META-US Q4 2025 vs Q3 2025 Analysis]] |
+| GOOGL-US | Internet | Warn | claude-only | 6/7 | 38 | Search Rev +12% YoY | [[GOOGL-US Q4 2025 vs Q3 2025 Analysis]] |
 
 Dashboard: [[2026-02-12 1430 Q4 2025 Pipeline Dashboard]]
 

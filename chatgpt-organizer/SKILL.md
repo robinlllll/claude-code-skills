@@ -1,3 +1,8 @@
+---
+name: chatgpt-organizer
+description: Parse, categorize, search, and export ChatGPT conversation history to Obsidian
+---
+
 # ChatGPT History
 
 Parse, categorize, search, and export ChatGPT conversation history to Obsidian.
