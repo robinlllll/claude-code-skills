@@ -42,3 +42,10 @@ initiate/plan-initiate-review*.md
 
 # AB test data (runtime-generated)
 socratic-writer/data/ab_test*.json
+
+# Samples with real portfolio/research data
+thesis/samples/
+transcript-analyzer/samples/
+
+# Entity dictionary (coverage universe — personal)
+# shared/entity_dictionary.yaml  # already tracked, consider removing if sensitive

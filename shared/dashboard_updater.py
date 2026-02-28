@@ -18,6 +18,7 @@ SCAN_FOLDERS = [
     "研究/财报分析",
     "研究/研报摘要",
     "研究/研究笔记",
+    "研究/Coverage Initiation",
     "研究/13F",
     "研究/供应链",
     "研究/估值",
@@ -38,6 +39,7 @@ CATEGORY_MAP = {
     "研究/财报分析": "财报分析",
     "研究/研报摘要": "研报摘要",
     "研究/研究笔记": "研究笔记",
+    "研究/Coverage Initiation": "Coverage Initiation",
     "研究/13F": "13F",
     "研究/供应链": "供应链",
     "研究/估值": "估值",
@@ -57,7 +59,7 @@ CATEGORY_MAP = {
 MAX_INLINE = 5
 
 # Categories where ALL items must be shown (no cap)
-SHOW_ALL_CATS = {"财报分析", "收件箱", "思考文章", "投资回顾", "研究笔记", "周会", "MOC", "估值", "13F", "13F 经理分析", "研报摘要"}
+SHOW_ALL_CATS = {"财报分析", "收件箱", "思考文章", "投资回顾", "研究笔记", "Coverage Initiation", "周会", "MOC", "估值", "13F", "13F 经理分析", "研报摘要"}
 
 
 # ---------------------------------------------------------------------------
@@ -151,6 +153,13 @@ def _display_name(category: str, fm: dict, stem: str) -> str:
 
     if category in ("MOC", "Flashback"):
         return ticker or stem.replace("_flashback", "")
+
+    if category == "Coverage Initiation":
+        if ticker:
+            return ticker
+        # Extract ticker from filename pattern: "2026-02-25 1133 TICKER Coverage Initiation"
+        m = re.search(r"\d{4}\s+(.+?)\s+Coverage", stem)
+        return m.group(1) if m else stem
 
     if category == "播客":
         title = fm.get("title", "")

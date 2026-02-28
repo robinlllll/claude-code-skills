@@ -42,8 +42,8 @@ CACHE_PATH = Path(__file__).parent / "data" / "meeting_backtest_cache.json"
 REPORT_DIR = VAULT_DIR / "写作" / "投资回顾"
 
 # Analysis windows
-MAIN_WINDOWS = [7, 30, 90]
-ALL_WINDOWS = [1, 3, 7, 14, 21, 30, 45, 60, 90, 180]
+MAIN_WINDOWS = [7, 30, 90, 180]
+ALL_WINDOWS = [1, 3, 7, 14, 21, 30, 45, 60, 90, 180, 270, 365]
 
 # Sector classification for attribution analysis
 SECTOR_MAP = {
@@ -304,6 +304,9 @@ class SentimentExtractor:
         (r"中性偏谨慎", Sentiment.BEARISH),
         (r"中性偏空", Sentiment.BEARISH),
         (r"中性偏乐观", Sentiment.BULLISH),
+        (r"中性存疑", Sentiment.NEUTRAL),
+        (r"极度看空", Sentiment.BEARISH),
+        (r"强力看多", Sentiment.BULLISH),
         (r"偏乐观", Sentiment.BULLISH),
         (r"偏悲观", Sentiment.BEARISH),
         (r"不太看好", Sentiment.BEARISH),
@@ -361,6 +364,30 @@ class SentimentExtractor:
 
         return Sentiment.UNKNOWN
 
+    @staticmethod
+    def classify_table_entry(text: str) -> str:
+        """Classify sentiment from summary table entry (一句话汇报摘要表).
+
+        Table entries have a consistent format: sentiment label FIRST, then details.
+        e.g., "中性，做空报告逻辑牵强..." or "偏空，AI不确定性..."
+        Only examines the leading label (before first comma/period) to avoid
+        keyword false positives from the detail text.
+        """
+        if not text or not text.strip():
+            return Sentiment.UNKNOWN
+
+        # Strip bold markers
+        text = text.replace("**", "").strip()
+
+        # Extract leading sentiment label (before first comma/period/semicolon)
+        label_match = re.match(r"^([^，,。；;]+)", text)
+        if not label_match:
+            return Sentiment.UNKNOWN
+        label = label_match.group(1).strip()
+
+        # Classify using the standard classifier on just the label
+        return SentimentExtractor.classify(label)
+
 
 # ── Meeting Parser ──────────────────────────────────────────────
 
@@ -368,9 +395,10 @@ class MeetingParser:
     """Parse weekly meeting .md files into structured data."""
 
     # Pattern to match section headers with tickers like ## $NVDA（...）
+    # Matches H2-H4 (##, ###, ####) to handle varying Gemini output formats
     TICKER_SECTION_RE = re.compile(
-        r"^\s*##\s+\$([A-Z0-9]+(?:\.[A-Z]+)?)"  # $TICKER with optional .HK/.T etc
-        r"(?:\s*[（(].*)?$",                        # optional Chinese/English parens
+        r"^\s*#{2,4}\s+\$([A-Z0-9]+(?:\.[A-Z]+)?)"  # $TICKER with optional .HK/.T etc
+        r"(?:\s*[（(].*)?$",                            # optional Chinese/English parens
         re.MULTILINE,
     )
 
@@ -380,15 +408,15 @@ class MeetingParser:
         re.MULTILINE,
     )
 
-    # Action hint section header
+    # Action hint section header (H3 or H4)
     ACTION_HINT_RE = re.compile(
-        r"###\s*潜在行动提示",
+        r"#{3,4}\s*潜在行动提示",
         re.MULTILINE,
     )
 
-    # Next section header (any ### or ##)
+    # Next section header (any ##, ###, or ####)
     NEXT_SECTION_RE = re.compile(
-        r"^(?:\s*#{2,3}\s)",
+        r"^(?:\s*#{2,4}\s)",
         re.MULTILINE,
     )
 
@@ -485,6 +513,16 @@ class MeetingParser:
                 if sentiment != Sentiment.UNKNOWN and not action_text:
                     action_text = full_section[:200]
 
+            # Validation: override with summary table (一句话汇报摘要表) when available
+            # The summary table is the authoritative sentiment source — it uses
+            # concise, direct labels (中性/偏多/偏空) that avoid keyword false positives
+            table_entry = self._find_summary_table_entry(text, raw_ticker)
+            if table_entry:
+                table_sentiment = SentimentExtractor.classify_table_entry(table_entry)
+                if table_sentiment != Sentiment.UNKNOWN and table_sentiment != sentiment:
+                    sentiment = table_sentiment
+                    action_text = table_entry
+
             yf_ticker = TickerNormalizer.meeting_to_yfinance(raw_ticker)
 
             results.append({
@@ -522,6 +560,17 @@ class MeetingParser:
                     if sentiment != Sentiment.UNKNOWN and not action_text:
                         action_text = full_section[:200]
 
+                # Validation: override with summary table
+                table_entry = self._find_summary_table_entry(text, section_name)
+                if not table_entry:
+                    # Also try by yf_ticker (e.g., "6690.HK")
+                    table_entry = self._find_summary_table_entry(text, yf_ticker)
+                if table_entry:
+                    table_sentiment = SentimentExtractor.classify_table_entry(table_entry)
+                    if table_sentiment != Sentiment.UNKNOWN and table_sentiment != sentiment:
+                        sentiment = table_sentiment
+                        action_text = table_entry
+
                 results.append({
                     "ticker_raw": section_name,
                     "ticker_yf": yf_ticker,
@@ -556,7 +605,7 @@ class MeetingParser:
             # Fallback A: Summary table at bottom
             action_text = self._find_summary_table_entry(text, ticker_str)
             if action_text:
-                sentiment = SentimentExtractor.classify(action_text)
+                sentiment = SentimentExtractor.classify_table_entry(action_text)
 
             # Fallback B: Search in meeting header summary
             if sentiment == Sentiment.UNKNOWN and meeting_summary:
@@ -579,21 +628,36 @@ class MeetingParser:
 
         return results
 
+    def _find_section_end(self, text: str, section_start: int) -> int:
+        """Find the end of a section: next heading at same or higher level.
+
+        For ## $TICKER (level 2): boundary is next ##
+        For ### $TICKER (level 3): boundary is next ## or ###
+        For #### $TICKER (level 4): boundary is next ##, ###, or ####
+        """
+        header_match = re.match(r"\s*(#{2,4})\s", text[section_start:])
+        if not header_match:
+            return len(text)
+        level = len(header_match.group(1))  # 2, 3, or 4
+
+        # Match headings at same or higher level (fewer or equal #'s)
+        boundary_re = re.compile(rf"\n\s*#{{2,{level}}}\s")
+        search_text = text[section_start:]
+        match = boundary_re.search(search_text[5:])  # skip current header
+        if match:
+            return section_start + 5 + match.start()
+        return len(text)
+
     def _find_action_hint(self, text: str, section_start: int) -> Optional[str]:
         """Find the 潜在行动提示 text for a given section."""
-        # Search forward from section_start for the action hint header
-        search_text = text[section_start:]
-
-        # Find the action hint within this section (before the next ## section)
-        next_h2 = re.search(r"\n\s*## ", search_text[5:])  # skip the current ## header
-        section_end = section_start + 5 + next_h2.start() if next_h2 else len(text)
+        section_end = self._find_section_end(text, section_start)
         section_text = text[section_start:section_end]
 
         action_match = self.ACTION_HINT_RE.search(section_text)
         if not action_match:
             return None
 
-        # Get text after the header until the next ### or ##
+        # Get text after the header until the next sub-section or section end
         after_hint = section_text[action_match.end():]
         next_section = self.NEXT_SECTION_RE.search(after_hint)
         if next_section:
@@ -605,12 +669,10 @@ class MeetingParser:
 
     def _find_core_summary(self, text: str, section_start: int) -> Optional[str]:
         """Find the 核心观点摘要 text for a given section."""
-        search_text = text[section_start:]
-        next_h2 = re.search(r"\n\s*## ", search_text[5:])
-        section_end = 5 + next_h2.start() if next_h2 else len(search_text)
-        section_text = search_text[:section_end]
+        section_end = self._find_section_end(text, section_start)
+        section_text = text[section_start:section_end]
 
-        summary_match = re.search(r"###\s*核心观点摘要", section_text)
+        summary_match = re.search(r"#{3,4}\s*核心观点摘要", section_text)
         if not summary_match:
             return None
 
@@ -621,11 +683,9 @@ class MeetingParser:
         return after[:500].strip()
 
     def _get_full_section_text(self, text: str, section_start: int) -> str:
-        """Get the full text of a ## section for broader sentiment classification."""
-        search_text = text[section_start:]
-        next_h2 = re.search(r"\n\s*## ", search_text[5:])
-        if next_h2:
-            return search_text[:5 + next_h2.start()]
+        """Get the full text of a section for broader sentiment classification."""
+        section_end = self._find_section_end(text, section_start)
+        return text[section_start:section_end]
         return search_text[:2000]
 
     def _get_meeting_summary(self, text: str) -> Optional[str]:

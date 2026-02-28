@@ -1,0 +1,768 @@
+# Sector-Specific Metrics Framework
+# Source of truth for sector-aware analysis across all skills.
+# Consumed by: /earnings-preview, /transcript-analyzer, /research, /thesis,
+#              /initiate, /earnings-pipeline, /review, /trade, /spreadsheet, /today
+#
+# Lookup pattern:
+#   entity_dictionary.yaml[TICKER].sector → sector_metrics.yaml[sector] → metrics
+#
+# Sector values match entity_dictionary.yaml GICS sectors exactly.
+# Some entity_dictionary sectors map to a more specific sub-framework below.
+
+# ── Mapping: entity_dictionary sector → framework sector ─────────────
+# This handles cases where GICS sector is too broad:
+#   Technology → use "SaaS / Cloud" for subscription businesses, "E-commerce" for marketplace,
+#                "Ad Tech" for advertising platforms. Default: "Technology (General)"
+#   Consumer Staples → use "Tobacco / Nicotine" for PM/MO/BTI, "Consumer Staples" for others
+#   Consumer Discretionary → use "Consumer / Retail" for retailers, sector-appropriate for others
+#   Communication Services → use "Streaming / Entertainment" subsector if applicable
+#
+# When sector is ambiguous, the skill should check key_products in entity_dictionary.yaml
+# or the company's thesis.yaml for classification hints.
+
+sectors:
+
+  # ── SaaS / Cloud ─────────────────────────────────────────────────
+  "SaaS / Cloud":
+    display_name: "SaaS / Cloud"
+    entity_dict_sectors: [Technology]  # subset — subscription/cloud businesses
+    example_tickers: [MSFT, GOOGL, CRM, SNOW, DDOG]
+
+    canonical_kpis:
+      - name: ARR (Annual Recurring Revenue)
+        importance: primary
+        data_source: "10-Q, earnings supplement, investor letter"
+        beat_miss_guide: ">consensus = beat; watch for definition changes (committed vs. contracted)"
+      - name: NRR (Net Revenue Retention)
+        importance: primary
+        data_source: "10-Q Note 2, earnings supplement"
+        beat_miss_guide: ">120% elite; 110-120% healthy; <100% contraction signal"
+      - name: RPO (Remaining Performance Obligations)
+        importance: primary
+        data_source: "10-Q revenue recognition note"
+        beat_miss_guide: "QoQ growth rate vs. revenue growth — acceleration = positive"
+      - name: Gross Margin
+        importance: secondary
+        data_source: "Income statement"
+        beat_miss_guide: ">75% best-in-class SaaS; watch for infrastructure cost scaling"
+      - name: Rule of 40
+        importance: secondary
+        data_source: "Calculated: revenue growth % + FCF margin %"
+        beat_miss_guide: ">40 = healthy; >60 = elite; <25 = concerning"
+      - name: Logo Adds / Customer Count
+        importance: secondary
+        data_source: "Earnings supplement, press release"
+        beat_miss_guide: "Net adds trend; watch for SMB vs enterprise mix shift"
+
+    suggested_kill_criteria:
+      - condition: "NRR drops below 100% for 2 consecutive quarters"
+        type: quantitative
+        threshold: "<100%"
+        data_source: "10-Q Note 2"
+      - condition: "Rule of 40 < 20 for 2 consecutive quarters"
+        type: quantitative
+        threshold: "<20"
+        data_source: "Calculated from 10-Q"
+      - condition: "RPO growth decelerates to below revenue growth for 3 consecutive quarters"
+        type: quantitative
+        threshold: "RPO growth < revenue growth"
+        data_source: "10-Q"
+
+    valuation_methods:
+      primary: "EV/NTM Revenue"
+      secondary: ["EV/ARR", "EV/FCF", "Rule of 40 adjusted"]
+      peer_multiples: ["EV/Revenue", "EV/GP", "P/FCF"]
+
+    research_queries:
+      - "NRR net revenue retention trend and vs SaaS peers"
+      - "ARR RPO remaining performance obligations growth"
+      - "customer acquisition cost (CAC) payback and LTV/CAC"
+      - "competitive win rates and market share in category"
+
+    alert_sensitivity:
+      eps_revision_critical: 7  # % threshold for CRITICAL alert
+      eps_revision_warning: 3
+      volatility_context: "High — growth multiples amplify estimate revisions"
+
+  # ── Consumer Staples ─────────────────────────────────────────────
+  "Consumer Staples":
+    display_name: "Consumer Staples"
+    entity_dict_sectors: [Consumer Staples]
+    example_tickers: [PG, KO, PEP, CELH, MDLZ]
+
+    canonical_kpis:
+      - name: Volume vs. Price/Mix
+        importance: primary
+        data_source: "Earnings call prepared remarks, press release"
+        beat_miss_guide: "Positive volume = organic demand; negative volume + price = elasticity risk"
+      - name: Market Share
+        importance: primary
+        data_source: "Nielsen/IRI/SPINS scanner data, earnings call"
+        beat_miss_guide: "Share gain = category leadership; share loss despite pricing = problem"
+      - name: Gross Margin
+        importance: primary
+        data_source: "Income statement"
+        beat_miss_guide: "Expansion from COGS relief = sustainable; from pricing = check volume"
+      - name: Category Growth Rate
+        importance: secondary
+        data_source: "Nielsen/IRI total category data, industry reports"
+        beat_miss_guide: "Growing above category = share gain; below = share loss"
+      - name: Inventory Days (Channel)
+        importance: secondary
+        data_source: "Balance sheet, distributor commentary"
+        beat_miss_guide: "Rising = potential destocking ahead; stable = healthy pull-through"
+      - name: Scanner Data vs GAAP Divergence
+        importance: secondary
+        data_source: "Compare Nielsen weekly data to reported revenue"
+        beat_miss_guide: "Large gap = channel timing effects; persistent gap = red flag"
+
+    suggested_kill_criteria:
+      - condition: "Volume decline > 3% for 2 consecutive quarters"
+        type: quantitative
+        threshold: "<-3%"
+        data_source: "Earnings call, press release"
+      - condition: "Market share loss > 200bps YoY"
+        type: quantitative
+        threshold: "<-200bps"
+        data_source: "Nielsen/IRI scanner data"
+      - condition: "Gross margin contracts > 200bps for 2 consecutive quarters without one-time explanation"
+        type: quantitative
+        threshold: "<-200bps QoQ"
+        data_source: "Income statement"
+
+    valuation_methods:
+      primary: "P/E (NTM)"
+      secondary: ["EV/EBITDA", "P/FCF", "Dividend yield"]
+      peer_multiples: ["P/E", "EV/EBITDA", "FCF yield"]
+
+    research_queries:
+      - "volume vs price/mix organic growth breakdown"
+      - "market share trends Nielsen IRI scanner data"
+      - "input cost commodity COGS pressure and hedging"
+      - "category growth rate and competitive dynamics"
+
+    alert_sensitivity:
+      eps_revision_critical: 5
+      eps_revision_warning: 2
+      volatility_context: "Low — defensive sector, tight consensus bands"
+
+  # ── Tobacco / Nicotine ────────────────────────────────────────────
+  "Tobacco / Nicotine":
+    display_name: "Tobacco / Nicotine"
+    entity_dict_sectors: [Consumer Staples]  # subset — PM, MO, BTI, SWMA
+    example_tickers: [PM, MO, BTI, SWMA]
+    parent_sector: "Consumer Staples"
+
+    canonical_kpis:
+      - name: Combustible Volume Decline Rate
+        importance: primary
+        data_source: "Earnings call, press release volume table"
+        beat_miss_guide: "Decline < 3% = manageable; > 5% = accelerating secular decline"
+      - name: Smoke-Free / RRP Revenue & Volume
+        importance: primary
+        data_source: "Earnings supplement, segment detail"
+        beat_miss_guide: "Double-digit growth = transition on track; deceleration = watch"
+      - name: Pricing Realization
+        importance: primary
+        data_source: "Revenue per unit vs. volume, earnings call"
+        beat_miss_guide: "Pricing > volume decline = margin protection; gap narrowing = risk"
+      - name: Market Share (Total Nicotine)
+        importance: primary
+        data_source: "Nielsen, Euromonitor, country filings"
+        beat_miss_guide: "Share in new categories (nicotine pouches, HTPs) is the key metric"
+      - name: RRP Adoption Rate / User Conversion
+        importance: secondary
+        data_source: "Company KPIs (e.g., IQOS users, ZYN cans shipped)"
+        beat_miss_guide: "Growing user base = future revenue visibility; plateau = saturation risk"
+      - name: Gross Margin by Segment
+        importance: secondary
+        data_source: "Segment reporting in 10-Q/10-K"
+        beat_miss_guide: "RRP margin expansion toward combustible levels = transition economics working"
+
+    suggested_kill_criteria:
+      - condition: "Combustible volume decline accelerates past -6% for 2 consecutive quarters"
+        type: quantitative
+        threshold: "<-6%"
+        data_source: "Press release volume table"
+      - condition: "ZYN/IQOS/RRP growth decelerates below 15% for 2 consecutive quarters"
+        type: quantitative
+        threshold: "<15% growth"
+        data_source: "Earnings supplement"
+      - condition: "Total nicotine market share loss > 100bps YoY in key markets"
+        type: quantitative
+        threshold: "<-100bps"
+        data_source: "Nielsen, Euromonitor"
+
+    valuation_methods:
+      primary: "P/E (NTM)"
+      secondary: ["EV/EBITDA", "Dividend yield", "Sum-of-parts (combustible + RRP)"]
+      peer_multiples: ["P/E", "EV/EBITDA", "FCF yield"]
+
+    research_queries:
+      - "combustible cigarette volume decline rate by market"
+      - "ZYN IQOS nicotine pouch heated tobacco volume growth"
+      - "pricing power excise tax regulatory risk"
+      - "smoke-free RRP category market share by country"
+
+    alert_sensitivity:
+      eps_revision_critical: 5
+      eps_revision_warning: 2
+      volatility_context: "Low — defensive yield stock, but RRP inflection can drive re-rating"
+
+  # ── Semiconductors ───────────────────────────────────────────────
+  "Semiconductors":
+    display_name: "Semiconductors"
+    entity_dict_sectors: [Semiconductors]
+    example_tickers: [NVDA, TSM, AVGO, AMD, INTC, MU, ASML]
+
+    canonical_kpis:
+      - name: Revenue by End Market / Segment
+        importance: primary
+        data_source: "Press release, earnings supplement"
+        beat_miss_guide: "Data center/AI segment growth rate is the swing factor for most names"
+      - name: Gross Margin %
+        importance: primary
+        data_source: "Income statement, earnings call guidance"
+        beat_miss_guide: ">60% for fabless = strong; watch for mix shift and pricing pressure"
+      - name: Inventory Levels (Days / $)
+        importance: primary
+        data_source: "Balance sheet, earnings call"
+        beat_miss_guide: "Rising inventory + slowing revenue = cycle risk; drawdown = recovery signal"
+      - name: Lead Times
+        importance: secondary
+        data_source: "Earnings call Q&A, industry checks (SEMI)"
+        beat_miss_guide: "Extending = demand > supply; contracting = normalization or demand weakness"
+      - name: Book-to-Bill Ratio
+        importance: secondary
+        data_source: "SEMI Association monthly, company-specific (if disclosed)"
+        beat_miss_guide: ">1.0 = demand building; <1.0 = deceleration; watch duration of trend"
+      - name: CapEx / Wafer Starts
+        importance: secondary
+        data_source: "Cash flow statement, foundry capacity announcements"
+        beat_miss_guide: "CapEx intensity vs revenue growth signals cycle positioning"
+
+    suggested_kill_criteria:
+      - condition: "Book-to-bill < 1.0 for 2 consecutive quarters"
+        type: quantitative
+        threshold: "<1.0"
+        data_source: "SEMI Association, company filings"
+      - condition: "Inventory days > 150 with revenue growth decelerating"
+        type: quantitative
+        threshold: ">150 days"
+        data_source: "Balance sheet"
+      - condition: "Data center/AI segment growth decelerates below 20% QoQ"
+        type: quantitative
+        threshold: "<20% QoQ growth"
+        data_source: "Earnings supplement"
+
+    valuation_methods:
+      primary: "P/E (NTM) — cycle-adjusted"
+      secondary: ["EV/EBITDA", "P/FCF", "EV/Revenue for high-growth"]
+      peer_multiples: ["P/E", "EV/EBITDA", "EV/Revenue"]
+
+    research_queries:
+      - "revenue by end market data center AI automotive industrial"
+      - "inventory levels days and channel inventory trends"
+      - "SEMI book to bill and wafer fab equipment spending"
+      - "competitive positioning process node technology roadmap"
+
+    alert_sensitivity:
+      eps_revision_critical: 10
+      eps_revision_warning: 5
+      volatility_context: "High — cyclical with high beta; earnings surprises amplified"
+
+  # ── Financials ───────────────────────────────────────────────────
+  "Financials":
+    display_name: "Financials"
+    entity_dict_sectors: [Financials]
+    example_tickers: [JPM, GS, HOOD, BRK.B]
+
+    canonical_kpis:
+      - name: Net Interest Income (NII)
+        importance: primary
+        data_source: "Income statement, earnings supplement"
+        beat_miss_guide: "NII trend driven by rate environment and balance sheet growth"
+      - name: Net Interest Margin (NIM)
+        importance: primary
+        data_source: "Earnings supplement, calculated"
+        beat_miss_guide: "Expansion = positive rate sensitivity; compression = deposit cost pressure"
+      - name: Credit Quality (NCO Rate, NPL Ratio)
+        importance: primary
+        data_source: "Credit supplement, 10-Q"
+        beat_miss_guide: "Rising NCOs = credit cycle turning; watch consumer vs. commercial"
+      - name: Provision for Credit Losses
+        importance: primary
+        data_source: "Income statement"
+        beat_miss_guide: "Provision > NCOs = building reserves (cautious); provision < NCOs = releasing"
+      - name: CET1 Ratio
+        importance: secondary
+        data_source: "Regulatory capital table in earnings supplement"
+        beat_miss_guide: "Above regulatory minimum + 100bps buffer = comfortable"
+      - name: Fee Income / Non-Interest Revenue
+        importance: secondary
+        data_source: "Income statement detail"
+        beat_miss_guide: "Trading, advisory, wealth management revenue diversification"
+
+    suggested_kill_criteria:
+      - condition: "NIM compression > 30bps QoQ for 2 consecutive quarters"
+        type: quantitative
+        threshold: "<-30bps QoQ"
+        data_source: "Earnings supplement"
+      - condition: "CET1 ratio falls below regulatory minimum + 100bps"
+        type: quantitative
+        threshold: "CET1 < reg min + 100bps"
+        data_source: "Regulatory capital table"
+      - condition: "NCO rate doubles from cycle trough"
+        type: quantitative
+        threshold: "NCO rate > 2x trough"
+        data_source: "Credit supplement"
+
+    valuation_methods:
+      primary: "P/TBV (Price / Tangible Book Value)"
+      secondary: ["P/E", "ROTCE-adjusted P/TBV", "Dividend yield"]
+      peer_multiples: ["P/TBV", "P/E", "ROTCE"]
+
+    research_queries:
+      - "net interest income NII and net interest margin NIM trend"
+      - "credit quality net charge-offs nonperforming loans"
+      - "CET1 capital adequacy and stress test results"
+      - "fee income trading revenue advisory pipeline"
+
+    alert_sensitivity:
+      eps_revision_critical: 5
+      eps_revision_warning: 2
+      volatility_context: "Medium — rate-sensitive; macro events can shift consensus rapidly"
+
+  # ── Consumer / Retail ────────────────────────────────────────────
+  "Consumer / Retail":
+    display_name: "Consumer / Retail"
+    entity_dict_sectors: [Consumer Discretionary]
+    example_tickers: [COST, WMT, NKE, LULU]
+
+    canonical_kpis:
+      - name: Same-Store Sales (SSS / Comps)
+        importance: primary
+        data_source: "Press release, monthly sales report"
+        beat_miss_guide: "Traffic-driven SSS > ticket-driven SSS in quality"
+      - name: Traffic / Transactions
+        importance: primary
+        data_source: "Earnings call, press release"
+        beat_miss_guide: "Positive traffic = healthy demand; negative = promotional dependency"
+      - name: Average Basket / Ticket Size
+        importance: secondary
+        data_source: "Calculated or disclosed in earnings call"
+        beat_miss_guide: "Rising ticket from mix-up = good; from inflation pass-through = watch elasticity"
+      - name: Inventory Days / Sell-Through
+        importance: primary
+        data_source: "Balance sheet, earnings call"
+        beat_miss_guide: "Inventory growth > sales growth = markdown risk; lean inventory = healthy"
+      - name: E-commerce Penetration
+        importance: secondary
+        data_source: "Press release, earnings call"
+        beat_miss_guide: "Growing share of total; contribution margin trend vs. stores"
+      - name: Store Count / Unit Economics
+        importance: secondary
+        data_source: "Press release, investor day"
+        beat_miss_guide: "New store productivity, payback period, cannibalization check"
+
+    suggested_kill_criteria:
+      - condition: "Same-store sales negative for 3 consecutive quarters"
+        type: quantitative
+        threshold: "SSS < 0% for 3Q"
+        data_source: "Press release"
+      - condition: "Inventory growth exceeds revenue growth by > 500bps for 2 quarters"
+        type: quantitative
+        threshold: "Inventory growth > revenue growth + 500bps"
+        data_source: "Balance sheet"
+      - condition: "Traffic consistently negative while ticket drives comps"
+        type: qualitative
+        data_source: "Earnings call, monthly reports"
+
+    valuation_methods:
+      primary: "P/E (NTM)"
+      secondary: ["EV/EBITDA", "EV/Sales", "P/FCF"]
+      peer_multiples: ["P/E", "EV/EBITDA", "EV/Sales"]
+
+    research_queries:
+      - "same store sales comps comparable store growth trend"
+      - "traffic vs ticket average transaction value"
+      - "inventory levels sell-through markdown risk"
+      - "store expansion pipeline and unit economics"
+
+    alert_sensitivity:
+      eps_revision_critical: 6
+      eps_revision_warning: 3
+      volatility_context: "Medium-High — consumer confidence and weather-sensitive"
+
+  # ── Healthcare / Pharma ──────────────────────────────────────────
+  "Healthcare / Pharma":
+    display_name: "Healthcare / Pharma"
+    entity_dict_sectors: [Healthcare]
+    example_tickers: [LLY, NVO, JNJ, PFE, ABBV]
+
+    canonical_kpis:
+      - name: Pipeline Updates (Phase transitions)
+        importance: primary
+        data_source: "Press releases, FDA calendar, earnings call"
+        beat_miss_guide: "Phase 3 reads, FDA approval dates, PDUFA action dates"
+      - name: Prescription Volume (TRx/NRx)
+        importance: primary
+        data_source: "IQVIA, Symphony Health, earnings supplement"
+        beat_miss_guide: "NRx trend for new launches; TRx for mature drugs; share of new scripts"
+      - name: Formulary Access / Payer Coverage
+        importance: primary
+        data_source: "Earnings call, payer channel checks"
+        beat_miss_guide: "% lives with access; Part D coverage; rebate impact on net price"
+      - name: Net Price vs. Gross Price
+        importance: secondary
+        data_source: "Calculated from gross-to-net adjustments"
+        beat_miss_guide: "Widening gross-to-net = increasing rebate pressure"
+      - name: Patent Cliff / LOE Exposure
+        importance: secondary
+        data_source: "10-K risk factors, Orange Book"
+        beat_miss_guide: "Revenue at risk from upcoming patent expirations within 3 years"
+      - name: R&D Productivity (Phase Success Rate)
+        importance: secondary
+        data_source: "Pipeline tracker, R&D day presentations"
+        beat_miss_guide: "Success rate by phase vs. industry benchmarks"
+
+    suggested_kill_criteria:
+      - condition: "Key drug fails Phase 3 trial or receives CRL from FDA"
+        type: qualitative
+        data_source: "Press release, FDA PDUFA calendar"
+      - condition: "Prescription volume declines > 10% QoQ for lead product"
+        type: quantitative
+        threshold: "<-10% QoQ TRx"
+        data_source: "IQVIA weekly data"
+      - condition: "Major patent cliff within 2 years with < 50% revenue replacement from pipeline"
+        type: quantitative
+        threshold: "<50% replacement"
+        data_source: "10-K, pipeline tracker"
+
+    valuation_methods:
+      primary: "P/E (NTM) for large pharma; rNPV for biotech"
+      secondary: ["EV/EBITDA", "Pipeline rNPV", "PEG ratio"]
+      peer_multiples: ["P/E", "EV/EBITDA", "EV/Revenue for growth"]
+
+    research_queries:
+      - "pipeline Phase 3 readouts FDA PDUFA approval dates"
+      - "prescription volume TRx NRx market share IQVIA"
+      - "formulary coverage Part D payer access rebates"
+      - "patent expiration LOE biosimilar competition timeline"
+
+    alert_sensitivity:
+      eps_revision_critical: 5
+      eps_revision_warning: 2
+      volatility_context: "Event-driven — binary outcomes from trial data and FDA decisions"
+
+  # ── Industrials ──────────────────────────────────────────────────
+  "Industrials":
+    display_name: "Industrials"
+    entity_dict_sectors: [Industrials]
+    example_tickers: [CAT, LMT, RTX, HON, GE]
+
+    canonical_kpis:
+      - name: Organic Revenue Growth
+        importance: primary
+        data_source: "Press release, earnings call"
+        beat_miss_guide: "Organic excludes FX and M&A; shows true demand"
+      - name: Backlog / Order Book
+        importance: primary
+        data_source: "Press release, earnings supplement"
+        beat_miss_guide: "Growing backlog = revenue visibility; backlog conversion rate matters"
+      - name: Book-to-Bill Ratio
+        importance: primary
+        data_source: "Earnings supplement, calculated"
+        beat_miss_guide: ">1.0 = orders > shipments = building; <1.0 = deceleration"
+      - name: Margin Bridge (Volume / Price / Mix / Productivity)
+        importance: primary
+        data_source: "Earnings call, investor presentation"
+        beat_miss_guide: "Delineates pricing power vs. volume leverage vs. cost savings"
+      - name: Free Cash Flow Conversion
+        importance: secondary
+        data_source: "Cash flow statement"
+        beat_miss_guide: "FCF/Net Income > 100% = high quality earnings"
+      - name: Aftermarket / Services Mix
+        importance: secondary
+        data_source: "Segment reporting"
+        beat_miss_guide: "Higher services mix = recurring revenue, better margins"
+
+    suggested_kill_criteria:
+      - condition: "Book-to-bill < 0.9 for 2 consecutive quarters"
+        type: quantitative
+        threshold: "<0.9"
+        data_source: "Earnings supplement"
+      - condition: "Organic growth turns negative for 2 consecutive quarters"
+        type: quantitative
+        threshold: "<0% organic"
+        data_source: "Press release"
+      - condition: "Backlog declines > 10% YoY"
+        type: quantitative
+        threshold: "<-10% YoY"
+        data_source: "Earnings supplement"
+
+    valuation_methods:
+      primary: "P/E (NTM)"
+      secondary: ["EV/EBITDA", "P/FCF", "EV/Revenue for defense"]
+      peer_multiples: ["P/E", "EV/EBITDA", "FCF yield"]
+
+    research_queries:
+      - "organic revenue growth ex FX ex M&A"
+      - "order backlog book to bill ratio trend"
+      - "margin bridge price volume mix productivity"
+      - "aftermarket services revenue mix and growth"
+
+    alert_sensitivity:
+      eps_revision_critical: 6
+      eps_revision_warning: 3
+      volatility_context: "Medium — cycle-sensitive; defense subsector less volatile"
+
+  # ── E-commerce / Marketplace ─────────────────────────────────────
+  "E-commerce":
+    display_name: "E-commerce / Marketplace"
+    entity_dict_sectors: [Technology]  # subset — marketplace/e-commerce businesses
+    example_tickers: [AMZN, PDD, JD, BABA, MELI]
+    parent_sector: "Technology"
+
+    canonical_kpis:
+      - name: GMV (Gross Merchandise Value)
+        importance: primary
+        data_source: "Earnings call, press release (if disclosed)"
+        beat_miss_guide: "GMV growth vs. revenue growth = take rate trend"
+      - name: Take Rate
+        importance: primary
+        data_source: "Calculated: revenue / GMV"
+        beat_miss_guide: "Rising take rate = monetization improving; watch for seller pushback"
+      - name: Active Buyers / Sellers
+        importance: primary
+        data_source: "Earnings supplement, press release"
+        beat_miss_guide: "Net buyer adds declining = saturation risk"
+      - name: Unit Economics (AOV, Orders per Buyer)
+        importance: secondary
+        data_source: "Calculated from GMV / buyers / orders"
+        beat_miss_guide: "Rising AOV = mix-up; rising frequency = engagement; both positive"
+      - name: Fulfillment / Logistics Cost per Order
+        importance: secondary
+        data_source: "Segment reporting, earnings call"
+        beat_miss_guide: "Declining = scale economics; rising = investment phase or inefficiency"
+      - name: Advertising Revenue Growth
+        importance: secondary
+        data_source: "Segment reporting"
+        beat_miss_guide: "High-margin revenue stream; growth rate vs. GMV growth"
+
+    suggested_kill_criteria:
+      - condition: "Active buyer count declines QoQ for 2 consecutive quarters"
+        type: quantitative
+        threshold: "Negative QoQ buyers"
+        data_source: "Earnings supplement"
+      - condition: "Take rate compresses > 50bps YoY without strategic explanation"
+        type: quantitative
+        threshold: "<-50bps YoY"
+        data_source: "Calculated"
+      - condition: "GMV growth decelerates below GDP growth for 2 consecutive quarters"
+        type: quantitative
+        threshold: "GMV growth < GDP growth"
+        data_source: "Earnings call, press release"
+
+    valuation_methods:
+      primary: "EV/Revenue or EV/GMV"
+      secondary: ["P/E (NTM)", "EV/EBITDA", "P/FCF"]
+      peer_multiples: ["EV/GMV", "P/E", "EV/Revenue"]
+
+    research_queries:
+      - "GMV gross merchandise value growth and take rate"
+      - "active buyers sellers marketplace liquidity"
+      - "fulfillment logistics unit economics cost per order"
+      - "advertising revenue monetization and seller tools"
+
+    alert_sensitivity:
+      eps_revision_critical: 8
+      eps_revision_warning: 4
+      volatility_context: "High — growth expectations embedded; consumer spending sensitive"
+
+  # ── Energy ───────────────────────────────────────────────────────
+  "Energy":
+    display_name: "Energy"
+    entity_dict_sectors: [Energy]
+    example_tickers: [XOM, CVX, COP, SLB]
+
+    canonical_kpis:
+      - name: Production Volume (BOE/d)
+        importance: primary
+        data_source: "Press release, operations supplement"
+        beat_miss_guide: "Organic production growth vs. guidance; watch for asset sales/buys"
+      - name: Realized Price ($/BOE)
+        importance: primary
+        data_source: "Earnings supplement"
+        beat_miss_guide: "Realization vs. benchmark (WTI, Brent, Henry Hub)"
+      - name: Upstream Cash Margin
+        importance: primary
+        data_source: "Segment reporting"
+        beat_miss_guide: "Breakeven analysis; margin expansion at constant commodity = efficiency"
+      - name: CapEx Discipline
+        importance: secondary
+        data_source: "Cash flow statement, guidance"
+        beat_miss_guide: "CapEx within guidance = discipline; overrun = watch returns"
+      - name: Shareholder Returns (Buyback + Dividend)
+        importance: secondary
+        data_source: "Cash flow statement, press release"
+        beat_miss_guide: "Total return yield; consistency of buyback program"
+      - name: Reserve Replacement Ratio
+        importance: secondary
+        data_source: "Annual report, investor day"
+        beat_miss_guide: ">100% = replacing what's produced; <100% = depleting base"
+
+    suggested_kill_criteria:
+      - condition: "Production growth misses guidance by > 5% for 2 consecutive quarters"
+        type: quantitative
+        threshold: ">5% miss vs guidance"
+        data_source: "Operations supplement"
+      - condition: "CapEx exceeds guidance by > 15% without corresponding production uplift"
+        type: quantitative
+        threshold: ">15% overrun"
+        data_source: "Cash flow statement"
+      - condition: "Breakeven rises above $60/bbl WTI"
+        type: quantitative
+        threshold: ">$60/bbl"
+        data_source: "Calculated from segment reporting"
+
+    valuation_methods:
+      primary: "EV/EBITDA (NTM at strip pricing)"
+      secondary: ["P/FCF", "EV/BOE (reserves)", "Dividend yield"]
+      peer_multiples: ["EV/EBITDA", "P/FCF", "FCF yield"]
+
+    research_queries:
+      - "production volume growth guidance and execution"
+      - "breakeven cost per barrel upstream efficiency"
+      - "capital allocation buyback dividend shareholder returns"
+      - "reserve replacement and resource base quality"
+
+    alert_sensitivity:
+      eps_revision_critical: 8
+      eps_revision_warning: 4
+      volatility_context: "High — commodity price driven; macro-sensitive"
+
+  # ── Communication Services / Streaming ───────────────────────────
+  "Communication Services":
+    display_name: "Communication Services / Streaming"
+    entity_dict_sectors: [Communication Services]
+    example_tickers: [NFLX, DIS, GOOGL, META]
+
+    canonical_kpis:
+      - name: Subscriber / MAU / DAU Count
+        importance: primary
+        data_source: "Earnings supplement, press release"
+        beat_miss_guide: "Net adds trend; paid vs. ad-supported mix; ARPU trajectory"
+      - name: ARPU (Average Revenue Per User)
+        importance: primary
+        data_source: "Calculated or disclosed in earnings supplement"
+        beat_miss_guide: "Rising ARPU = pricing power + monetization; declining = competition"
+      - name: Engagement (Time Spent, Impressions)
+        importance: secondary
+        data_source: "Earnings call, third-party data (Sensor Tower, data.ai)"
+        beat_miss_guide: "Engagement trend underpins advertising and subscription monetization"
+      - name: Content Spend / Amortization
+        importance: secondary
+        data_source: "Cash flow statement, content liability note"
+        beat_miss_guide: "Content efficiency: revenue growth vs. content spend growth"
+      - name: Ad Revenue Growth
+        importance: primary
+        data_source: "Segment reporting"
+        beat_miss_guide: "Digital ad market share; CPM trends; impression growth vs. pricing"
+      - name: Churn Rate
+        importance: secondary
+        data_source: "Earnings call (if disclosed), third-party estimates"
+        beat_miss_guide: "Monthly churn < 3% = healthy; rising churn = content or competition issue"
+
+    suggested_kill_criteria:
+      - condition: "Net subscriber/user adds turn negative for 2 consecutive quarters"
+        type: quantitative
+        threshold: "Negative net adds"
+        data_source: "Earnings supplement"
+      - condition: "ARPU declines > 5% YoY without strategic explanation (e.g., new low-cost tier)"
+        type: quantitative
+        threshold: "<-5% YoY"
+        data_source: "Earnings supplement"
+      - condition: "Ad revenue market share loss > 200bps YoY"
+        type: quantitative
+        threshold: "<-200bps"
+        data_source: "Industry reports, eMarketer"
+
+    valuation_methods:
+      primary: "P/E (NTM)"
+      secondary: ["EV/EBITDA", "EV/Subscriber", "EV/DAU"]
+      peer_multiples: ["P/E", "EV/EBITDA", "EV/Revenue"]
+
+    research_queries:
+      - "subscriber MAU DAU growth and net adds trend"
+      - "ARPU average revenue per user pricing power"
+      - "ad revenue digital advertising market share"
+      - "content spend efficiency and engagement metrics"
+
+    alert_sensitivity:
+      eps_revision_critical: 7
+      eps_revision_warning: 3
+      volatility_context: "Medium-High — subscriber metrics drive outsized reactions"
+
+  # ── Ad Tech ──────────────────────────────────────────────────────
+  "Ad Tech":
+    display_name: "Ad Tech"
+    entity_dict_sectors: [Technology]  # subset — advertising technology
+    example_tickers: [APP, TTD, DV, IAS]
+    parent_sector: "Technology"
+
+    canonical_kpis:
+      - name: Revenue Growth (ex-TAC for some)
+        importance: primary
+        data_source: "Income statement, earnings supplement"
+        beat_miss_guide: "Revenue ex-TAC = true platform economics for some models"
+      - name: Software Platform Revenue
+        importance: primary
+        data_source: "Segment reporting"
+        beat_miss_guide: "High-margin software vs. lower-margin app revenue split"
+      - name: ROAS / Advertiser ROI
+        importance: primary
+        data_source: "Earnings call, case studies"
+        beat_miss_guide: "Platform's value prop — improving ROAS = pricing power"
+      - name: Net Revenue Retention (Enterprise)
+        importance: secondary
+        data_source: "10-Q, earnings supplement"
+        beat_miss_guide: "Enterprise cohort expansion = land-and-expand working"
+      - name: Adjusted EBITDA Margin
+        importance: secondary
+        data_source: "Income statement"
+        beat_miss_guide: "Expanding margins at scale = operating leverage"
+      - name: Install Volume / Impressions Processed
+        importance: secondary
+        data_source: "Earnings call, industry data"
+        beat_miss_guide: "Volume growth = market share in ad serving/mediation"
+
+    suggested_kill_criteria:
+      - condition: "Software platform revenue growth decelerates below 20%"
+        type: quantitative
+        threshold: "<20% growth"
+        data_source: "Segment reporting"
+      - condition: "IDFA/privacy changes cause >15% revenue impact"
+        type: quantitative
+        threshold: ">15% impact"
+        data_source: "Earnings call, disclosed impact"
+      - condition: "Major customer concentration: top 10 customers > 40% of revenue"
+        type: quantitative
+        threshold: ">40% concentration"
+        data_source: "10-K customer concentration note"
+
+    valuation_methods:
+      primary: "EV/Revenue (NTM)"
+      secondary: ["P/E", "EV/EBITDA", "EV/GP"]
+      peer_multiples: ["EV/Revenue", "EV/GP", "P/E"]
+
+    research_queries:
+      - "software platform revenue growth vs app revenue"
+      - "advertiser ROAS return on ad spend and retention"
+      - "privacy regulation IDFA ATT impact and mitigation"
+      - "market share in mobile ad mediation programmatic"
+
+    alert_sensitivity:
+      eps_revision_critical: 10
+      eps_revision_warning: 5
+      volatility_context: "Very High — high-growth multiple; privacy/regulation shocks"

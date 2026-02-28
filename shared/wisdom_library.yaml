@@ -1,0 +1,54 @@
+# Wisdom Library — Framework to Notebook Mapping
+# Used by: /initiate, /research, /thesis (Phase 2 integration)
+# Notebook IDs resolved at runtime from library.json by name prefix match
+
+version: "1.0"
+created: "2026-02-25"
+
+# Lookup: find notebook where name starts with this prefix
+notebook_prefix: "投资智慧:"
+
+notebooks:
+  moat_competition:
+    name_contains: "护城河与竞争"
+    nlm_id: "投资智慧:-护城河与竞争"
+    framework_sections: ["S2", "S3"]
+    example_queries:
+      - "这个行业的主要进入壁垒是什么？"
+      - "网络效应 vs 规模效应 vs 品牌护城河，哪种更持久？"
+      - "创新者窘境对在位者的威胁有多大？"
+
+  financial_valuation:
+    name_contains: "财务分析与估值"
+    nlm_id: "投资智慧:-财务分析与估值"
+    framework_sections: ["S4", "S6", "S7"]
+    example_queries:
+      - "盈利质量的红旗信号有哪些？"
+      - "DCF 估值中终值假设最容易犯什么错误？"
+      - "因子投资中 value 和 quality 因子怎么定义？"
+
+  philosophy_decisions:
+    name_contains: "投资哲学与决策"
+    nlm_id: "投资智慧:-投资哲学与决策"
+    framework_sections: ["S5", "S8"]
+    example_queries:
+      - "安全边际的实际应用标准是什么？"
+      - "如何评估管理层的资本配置能力？"
+      - "面对不确定性时，应该怎样做投资决策？"
+
+  industry_business:
+    name_contains: "行业与商业模式"
+    nlm_id: "投资智慧:-行业与商业模式"
+    framework_sections: ["S1"]
+    example_queries:
+      - "消费品行业的关键驱动因素有哪些？"
+      - "如何判断一个行业处于生命周期的哪个阶段？"
+      - "成长股和价值股的分析框架有什么本质区别？"
+
+  master:
+    name_contains: "Master Library"
+    nlm_id: "投资智慧:-master-library"
+    framework_sections: ["S1", "S2", "S3", "S4", "S5", "S6", "S7", "S8", "S9"]
+    example_queries:
+      - "巴菲特的护城河理念和达摩达兰的估值方法怎么结合？"
+      - "从竞争战略到财务分析，完整评估一家消费品公司需要问哪些问题？"

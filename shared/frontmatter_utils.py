@@ -99,19 +99,24 @@ def build_frontmatter(
     published_at: Optional[date] = None,
     tickers: Optional[list[str]] = None,
     tags: Optional[list[str]] = None,
+    content_type: str = "",
+    source_lang: str = "",
     extra: Optional[dict] = None,
 ) -> str:
     """Build standardized YAML frontmatter string per DATA_CONTRACT.
 
     Args:
         id: Canonical key (source_platform + stable_id)
-        type: Note type (substack|x|transcript|thesis|passed|trade|backtest|supply-chain)
+        type: Note type (substack|x|transcript|thesis|passed|trade|backtest|supply-chain|
+              news_article|sellside_report|podcast|meeting|wechat|xueqiu)
         source_platform: Origin platform
         author: Content author
         source_url: Original URL
         published_at: Original publication date
         tickers: List of ticker symbols mentioned
         tags: Obsidian tags
+        content_type: "input" | "output" | "mixed"
+        source_lang: "en" | "zh"
         extra: Additional frontmatter fields
 
     Returns:
@@ -134,6 +139,11 @@ def build_frontmatter(
         f"tickers: [{', '.join(ticker_list)}]",
         f"tags: [{', '.join(tag_list)}]",
     ]
+
+    if content_type:
+        lines.append(f"content_type: {content_type}")
+    if source_lang:
+        lines.append(f"source_lang: {source_lang}")
 
     if extra:
         for k, v in extra.items():

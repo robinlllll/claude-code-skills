@@ -234,8 +234,24 @@ def gather_context(week_start: str) -> dict:
     # Recurring tasks: those with recurrence field
     recurring = [t for t in all_active if t.get("recurrence")]
 
-    # ── Calendar Events ──
+    # ── Calendar Events (Google Calendar + local .ics) ──
     calendar_events = parse_ics_events(ws, we)
+
+    # Merge Google Calendar events if authenticated
+    try:
+        from shared.gcal import is_authenticated, list_events_grouped
+        if is_authenticated():
+            gcal_events = list_events_grouped(ws.isoformat(), we.isoformat())
+            for ds, evts in gcal_events.items():
+                existing = calendar_events.get(ds, [])
+                # Deduplicate by summary similarity
+                existing_summaries = {e["summary"].lower().strip() for e in existing}
+                for ev in evts:
+                    if ev["summary"].lower().strip() not in existing_summaries:
+                        existing.append(ev)
+                calendar_events[ds] = sorted(existing, key=lambda e: e.get("time") or "99:99")
+    except Exception:
+        pass  # Google Calendar not configured — use .ics only
 
     # ── Thesis Staleness ──
     thesis_files = scan_thesis_files()

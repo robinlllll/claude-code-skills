@@ -241,27 +241,26 @@ def ingest_file(file_path, source_type="auto", source_org="", author="", ticker_
     language = _detect_language(text)
 
     # 8. Save to Obsidian
+    from shared.frontmatter_utils import build_frontmatter
     OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
     date_str = datetime.now().strftime("%Y-%m-%d")
     safe_title = "".join(c for c in title if c.isalnum() or c in " -_").strip()[:80]
     output_name = f"{date_str} - {source_type}_{safe_title}.md"
     output_path = OUTPUT_DIR / output_name
 
-    frontmatter = {
-        "tags": ["knowledge-base", source_type] + ([primary_ticker] if primary_ticker else []),
-        "date": date_str,
-        "source": source_org or "local",
-        "ticker": primary_ticker or "",
-        "tickers": tickers,
-        "source_type": source_type,
-        "framework_tags": framework_tags,
-        "author": author,
-        "comments": "",
-    }
+    fm_str = build_frontmatter(
+        id=f"{source_org or 'local'}_{canonical_hash[:12]}",
+        type=source_type,
+        source_platform=source_org or "local",
+        author=author,
+        tickers=tickers,
+        tags=["knowledge-base", source_type] + ([primary_ticker] if primary_ticker else []),
+        content_type="input",
+        source_lang=language,
+        extra={"framework_tags": framework_tags} if framework_tags else None,
+    )
 
-    content = f"""---
-{chr(10).join(f'{k}: {json.dumps(v, ensure_ascii=False) if isinstance(v, (list, dict)) else (f"{chr(34)}{chr(34)}" if v == "" and k == "comments" else v)}' for k, v in frontmatter.items() if v or k == "comments")}
----
+    content = f"""{fm_str}
 
 # {title}
 
@@ -361,6 +360,81 @@ def ingest_url(url):
     result = ingest_file(temp_path, source_org=url)
     Path(temp_path).unlink(missing_ok=True)
     return result
+
+
+# Premium news domain mapping
+PREMIUM_DOMAINS = {
+    "bloomberg.com": "bloomberg",
+    "wsj.com": "wsj",
+    "ft.com": "ft",
+    "reuters.com": "reuters",
+    "barrons.com": "barrons",
+}
+
+
+def detect_source_platform(url: str) -> str:
+    """Detect source platform from URL domain."""
+    from urllib.parse import urlparse
+    domain = urlparse(url).netloc.lower()
+    for pattern, platform in PREMIUM_DOMAINS.items():
+        if pattern in domain:
+            return platform
+    return "web"
+
+
+def ingest_from_browser(page_text: str, page_url: str, page_title: str = "") -> dict:
+    """Ingest content captured from browser via Chrome MCP.
+
+    Args:
+        page_text: Full page text (markdown from Chrome MCP get_page_text)
+        page_url: Original URL of the page
+        page_title: Page title (optional, extracted from text if missing)
+
+    Returns:
+        dict with ingestion results or error
+    """
+    import tempfile
+
+    if not page_text or len(page_text.strip()) < 100:
+        return {"error": "Page text too short (<100 chars)"}
+
+    source_platform = detect_source_platform(page_url)
+
+    # Write to temp file for ingestion pipeline
+    with tempfile.NamedTemporaryFile(mode="w", suffix=".md", delete=False, encoding="utf-8") as f:
+        # Prepend URL as reference
+        f.write(f"Source: {page_url}\n\n")
+        if page_title:
+            f.write(f"# {page_title}\n\n")
+        f.write(page_text)
+        temp_path = f.name
+
+    try:
+        result = ingest_file(
+            temp_path,
+            source_type="article",
+            source_org=source_platform,
+        )
+        # After ingest, patch frontmatter with browser-specific fields
+        if result and result.get("path"):
+            from shared.frontmatter_utils import patch_frontmatter
+            patch_frontmatter(result["path"], {
+                "source_url": page_url,
+                "content_type": "input",
+                "source_lang": _detect_language(page_text),
+            })
+
+            # Upsert to vector memory
+            try:
+                from shared.vector_memory import upsert_from_file
+                vm_result = upsert_from_file(result["path"])
+                result["vector_memory"] = vm_result
+            except Exception as e:
+                result["vector_memory_error"] = str(e)
+
+        return result
+    finally:
+        Path(temp_path).unlink(missing_ok=True)
 
 
 def search_index(query=None, ticker=None, source_type=None, days=None):

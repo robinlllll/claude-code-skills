@@ -29,7 +29,12 @@ CACHE_DIR = SHARED_DIR / "data" / "ibkr_cache"
 TRADES_CSV = CACHE_DIR / "trades.csv"
 POSITIONS_CSV = CACHE_DIR / "positions.csv"
 CASH_CSV = CACHE_DIR / "cash.csv"
+CASH_TRANSACTIONS_CSV = CACHE_DIR / "cash_transactions.csv"
+CORPORATE_ACTIONS_CSV = CACHE_DIR / "corporate_actions.csv"
 SYNC_META = CACHE_DIR / "last_sync.txt"
+
+CASH_TX_QUERY_ID = os.environ.get("IBKR_CASH_TX_QUERY_ID", "1402937")
+CORP_ACT_QUERY_ID = os.environ.get("IBKR_CORP_ACT_QUERY_ID", "1402938")
 
 # ── Lazy imports with friendly errors ────────────────────────
 
@@ -254,6 +259,41 @@ _CASH_FIELDS = [
     "otherFees",
 ]
 
+_CASH_TRANSACTION_FIELDS = [
+    "accountId",
+    "symbol",
+    "description",
+    "conid",
+    "currency",
+    "assetCategory",
+    "reportDate",
+    "dateTime",
+    "settleDate",
+    "amount",
+    "type",
+    "transactionID",
+    "fxRateToBase",
+    "code",
+    "actionID",
+]
+
+_CORPORATE_ACTION_FIELDS = [
+    "accountId",
+    "symbol",
+    "description",
+    "conid",
+    "currency",
+    "assetCategory",
+    "reportDate",
+    "dateTime",
+    "type",
+    "transactionID",
+    "quantity",
+    "amount",
+    "actionDescription",
+    "code",
+]
+
 
 def parse_trades(report: Any) -> pd.DataFrame:
     """Extract trades from a FlexQueryResponse into a DataFrame.
@@ -301,6 +341,121 @@ def parse_cash(report: Any) -> pd.DataFrame:
         print("  [cash] No cash data found in report.")
     else:
         print(f"  [cash] Parsed {len(df)} cash entries.")
+    return df
+
+
+def parse_cash_transactions(report: Any) -> pd.DataFrame:
+    """Extract individual CashTransaction records from FlexQueryResponse."""
+    rows: list[dict] = []
+    for stmt in report.FlexStatements:
+        for ct in getattr(stmt, "CashTransactions", []):
+            rows.append(_obj_to_dict(ct, _CASH_TRANSACTION_FIELDS))
+    df = pd.DataFrame(rows)
+    if df.empty:
+        print("  [cash_transactions] No CashTransaction records found.")
+    else:
+        print(f"  [cash_transactions] Parsed {len(df)} records.")
+    return df
+
+
+def parse_corporate_actions(report: Any) -> pd.DataFrame:
+    """Extract CorporateAction records from FlexQueryResponse."""
+    rows: list[dict] = []
+    for stmt in report.FlexStatements:
+        for ca in getattr(stmt, "CorporateActions", []):
+            rows.append(_obj_to_dict(ca, _CORPORATE_ACTION_FIELDS))
+    df = pd.DataFrame(rows)
+    if df.empty:
+        print("  [corporate_actions] No CorporateAction records found.")
+    else:
+        print(f"  [corporate_actions] Parsed {len(df)} records.")
+    return df
+
+
+def parse_cash_transactions_xml(xml_path: str) -> pd.DataFrame:
+    """Parse CashTransaction records from raw IBKR Flex XML file.
+
+    Used for historical XML files downloaded manually from IBKR.
+    """
+    import xml.etree.ElementTree as ET
+
+    tree = ET.parse(str(xml_path))
+    root = tree.getroot()
+
+    rows = []
+    for stmt in root.iter("FlexStatement"):
+        for section in stmt:
+            if section.tag == "CashTransactions":
+                for r in section:
+                    rows.append(
+                        {
+                            "accountId": r.get("accountId", ""),
+                            "symbol": r.get("symbol", ""),
+                            "description": r.get("description", ""),
+                            "conid": r.get("conid", ""),
+                            "currency": r.get("currency", ""),
+                            "assetCategory": r.get("assetCategory", ""),
+                            "reportDate": r.get("reportDate", ""),
+                            "dateTime": r.get("dateTime", ""),
+                            "settleDate": r.get("settleDate", ""),
+                            "amount": r.get("amount", ""),
+                            "type": r.get("type", ""),
+                            "transactionID": r.get("transactionID", ""),
+                            "fxRateToBase": r.get("fxRateToBase", ""),
+                            "code": r.get("code", ""),
+                            "actionID": r.get("actionID", ""),
+                        }
+                    )
+
+    df = pd.DataFrame(rows)
+    if not df.empty and "amount" in df.columns:
+        df["amount"] = pd.to_numeric(df["amount"], errors="coerce")
+        df["fxRateToBase"] = pd.to_numeric(df["fxRateToBase"], errors="coerce")
+    print(
+        f"  [xml] Parsed {len(df)} CashTransaction records from {Path(xml_path).name}"
+    )
+    return df
+
+
+def parse_corporate_actions_xml(xml_path: str) -> pd.DataFrame:
+    """Parse CorporateAction records from raw IBKR Flex XML file."""
+    import xml.etree.ElementTree as ET
+
+    tree = ET.parse(str(xml_path))
+    root = tree.getroot()
+
+    rows = []
+    for stmt in root.iter("FlexStatement"):
+        for section in stmt:
+            if section.tag == "CorporateActions":
+                for r in section:
+                    rows.append(
+                        {
+                            "accountId": r.get("accountId", ""),
+                            "symbol": r.get("symbol", ""),
+                            "description": r.get("description", ""),
+                            "conid": r.get("conid", ""),
+                            "currency": r.get("currency", ""),
+                            "assetCategory": r.get("assetCategory", ""),
+                            "reportDate": r.get("reportDate", ""),
+                            "dateTime": r.get("dateTime", ""),
+                            "type": r.get("type", ""),
+                            "transactionID": r.get("transactionID", ""),
+                            "quantity": r.get("quantity", ""),
+                            "amount": r.get("amount", ""),
+                            "actionDescription": r.get("actionDescription", ""),
+                            "code": r.get("code", ""),
+                        }
+                    )
+
+    df = pd.DataFrame(rows)
+    if not df.empty:
+        for col in ["quantity", "amount"]:
+            if col in df.columns:
+                df[col] = pd.to_numeric(df[col], errors="coerce")
+    print(
+        f"  [xml] Parsed {len(df)} CorporateAction records from {Path(xml_path).name}"
+    )
     return df
 
 
@@ -364,6 +519,16 @@ def load_cached_cash() -> pd.DataFrame:
     return _load_df(CASH_CSV)
 
 
+def load_cached_cash_transactions() -> pd.DataFrame:
+    """Load individual cash transactions from CSV cache."""
+    return _load_df(CASH_TRANSACTIONS_CSV)
+
+
+def load_cached_corporate_actions() -> pd.DataFrame:
+    """Load corporate actions from CSV cache."""
+    return _load_df(CORPORATE_ACTIONS_CSV)
+
+
 # ── Sync ─────────────────────────────────────────────────────
 
 
@@ -396,10 +561,6 @@ def sync() -> dict:
     _save_df(positions_new, POSITIONS_CSV)
     _save_df(cash_new, CASH_CSV)
 
-    # Record sync timestamp
-    CACHE_DIR.mkdir(parents=True, exist_ok=True)
-    SYNC_META.write_text(datetime.now().isoformat(), encoding="utf-8")
-
     stats = {
         "trades": len(trades_merged),
         "trades_new": len(trades_new),
@@ -408,6 +569,35 @@ def sync() -> dict:
         "synced_at": datetime.now().isoformat(),
         "incremental": incremental,
     }
+
+    # Download CashTransactions query (1402937)
+    try:
+        ct_report = download_flex_report(config["token"], CASH_TX_QUERY_ID)
+        ct_new = parse_cash_transactions(ct_report)
+        if not ct_new.empty:
+            ct_old = _load_df(CASH_TRANSACTIONS_CSV)
+            ct_merged = _merge_incremental(ct_old, ct_new, key_cols=["transactionID"])
+            _save_df(ct_merged, CASH_TRANSACTIONS_CSV)
+            stats["cash_transactions"] = len(ct_merged)
+    except Exception as e:
+        print(f"  [cash_transactions] Sync failed: {e}")
+
+    # Download CorporateActions query (1402938)
+    try:
+        ca_report = download_flex_report(config["token"], CORP_ACT_QUERY_ID)
+        ca_new = parse_corporate_actions(ca_report)
+        if not ca_new.empty:
+            ca_old = _load_df(CORPORATE_ACTIONS_CSV)
+            ca_merged = _merge_incremental(ca_old, ca_new, key_cols=["transactionID"])
+            _save_df(ca_merged, CORPORATE_ACTIONS_CSV)
+            stats["corporate_actions"] = len(ca_merged)
+    except Exception as e:
+        print(f"  [corporate_actions] Sync failed: {e}")
+
+    # Record sync timestamp
+    CACHE_DIR.mkdir(parents=True, exist_ok=True)
+    SYNC_META.write_text(datetime.now().isoformat(), encoding="utf-8")
+
     print(
         f"\nSync complete: {stats['trades']} trades ({stats['trades_new']} new), "
         f"{stats['positions']} positions, {stats['cash']} cash entries."
@@ -527,6 +717,8 @@ def _print_status() -> None:
         ("Trades", TRADES_CSV),
         ("Positions", POSITIONS_CSV),
         ("Cash", CASH_CSV),
+        ("Cash Txns", CASH_TRANSACTIONS_CSV),
+        ("Corp Actions", CORPORATE_ACTIONS_CSV),
     ]:
         if path.is_file():
             df = pd.read_csv(path, encoding="utf-8")

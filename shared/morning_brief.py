@@ -233,6 +233,289 @@ def _check_13f_deadline():
     return None
 
 
+def _get_overnight_alerts(hours: int = 16) -> list[dict]:
+    """Get price alerts from the last N hours (overnight)."""
+    alerts_log = Path.home() / ".claude" / "data" / "price_alerts.jsonl"
+    if not alerts_log.exists():
+        return []
+
+    cutoff = datetime.now() - timedelta(hours=hours)
+    alerts = []
+    try:
+        for line in alerts_log.read_text(encoding="utf-8").strip().split("\n"):
+            if not line.strip():
+                continue
+            entry = json.loads(line)
+            ts = datetime.fromisoformat(entry["timestamp"])
+            if ts >= cutoff:
+                alerts.append(entry)
+    except Exception:
+        pass
+    return alerts
+
+
+def _get_overnight_developments(tickers, threshold=2.0):
+    """Get pre-market / after-hours movers >threshold% with one news headline each."""
+    if not tickers:
+        return []
+    results = []
+    try:
+        import yfinance as yf
+        for ticker in tickers[:15]:
+            try:
+                stock = yf.Ticker(ticker)
+                info = stock.info
+                prev_close = info.get("previousClose") or info.get("regularMarketPreviousClose", 0)
+                if not prev_close:
+                    continue
+                # Pre-market price
+                pre_price = info.get("preMarketPrice")
+                post_price = info.get("postMarketPrice")
+                price = pre_price or post_price
+                if not price:
+                    continue
+                change_pct = ((price - prev_close) / prev_close) * 100
+                if abs(change_pct) < threshold:
+                    continue
+                session = "盘前" if pre_price else "盘后"
+                # Grab latest news headline
+                headline = ""
+                try:
+                    news = stock.news
+                    if news:
+                        first = news[0]
+                        # Support both old and new yfinance news structure
+                        content = first.get("content", {})
+                        if content:
+                            headline = content.get("title", "")
+                        if not headline:
+                            headline = first.get("title", "")
+                except Exception:
+                    pass
+                results.append({
+                    "ticker": ticker,
+                    "change_pct": change_pct,
+                    "session": session,
+                    "headline": headline,
+                })
+            except Exception:
+                continue
+    except ImportError:
+        pass
+    results.sort(key=lambda x: abs(x["change_pct"]), reverse=True)
+    return results
+
+
+def _get_earnings_reaction(tickers):
+    """Check if any portfolio tickers reported earnings yesterday; return reaction table rows."""
+    if not tickers:
+        return []
+    results = []
+    yesterday = (datetime.now() - timedelta(days=1)).date()
+    try:
+        import yfinance as yf
+        for ticker in tickers[:15]:
+            try:
+                stock = yf.Ticker(ticker)
+                # Check calendar for earnings date
+                cal = stock.calendar
+                if cal is None:
+                    continue
+                # calendar can be a dict or a DataFrame; normalise to dict
+                if hasattr(cal, "to_dict"):
+                    cal = cal.to_dict()
+                earn_date = None
+                # Try common key names
+                for key in ("Earnings Date", "earningsDate", "earnings_date"):
+                    val = cal.get(key)
+                    if val is not None:
+                        # May be a list (range) or a single value
+                        if isinstance(val, (list, tuple)) and val:
+                            val = val[0]
+                        try:
+                            from pandas import Timestamp
+                            if hasattr(val, "date"):
+                                earn_date = val.date()
+                            else:
+                                earn_date = Timestamp(val).date()
+                        except Exception:
+                            pass
+                        break
+                if earn_date != yesterday:
+                    continue
+                # Fetch actuals vs estimates
+                info = stock.info
+                eps_est = info.get("epsEstimateCurrentYear") or info.get("epsForward")
+                eps_act = info.get("trailingEps")
+                rev_est = info.get("revenueEstimate") or info.get("revenueForecasts")
+                rev_act = info.get("totalRevenue") or info.get("revenue")
+                # After-hours reaction
+                prev_close = info.get("previousClose") or info.get("regularMarketPreviousClose", 0)
+                post_price = info.get("postMarketPrice")
+                reaction = ""
+                if post_price and prev_close:
+                    reaction_pct = ((post_price - prev_close) / prev_close) * 100
+                    reaction = f"{reaction_pct:+.1f}%"
+
+                def _fmt_rev(v):
+                    if v is None:
+                        return "N/A"
+                    if v >= 1e9:
+                        return f"${v/1e9:.1f}B"
+                    if v >= 1e6:
+                        return f"${v/1e6:.0f}M"
+                    return f"${v:.0f}"
+
+                def _fmt_eps(v):
+                    return f"${v:.2f}" if v is not None else "N/A"
+
+                results.append({
+                    "ticker": ticker,
+                    "eps_est": _fmt_eps(eps_est),
+                    "eps_act": _fmt_eps(eps_act),
+                    "rev_est": _fmt_rev(rev_est),
+                    "rev_act": _fmt_rev(rev_act),
+                    "reaction": reaction or "N/A",
+                })
+            except Exception:
+                continue
+    except ImportError:
+        pass
+    return results
+
+
+def generate_trade_ideas():
+    """Scan thesis files for actionable trade ideas (catalysts, conviction changes, revisit triggers)."""
+    ideas = []
+    companies_dir = str(THESIS_DIR)
+    if not THESIS_DIR.exists():
+        return ""
+
+    today = datetime.now()
+    five_days_out = today + timedelta(days=5)
+    seven_days_ago = today - timedelta(days=7)
+
+    for ticker_dir in THESIS_DIR.iterdir():
+        if not ticker_dir.is_dir():
+            continue
+        ticker = ticker_dir.name.upper()
+
+        yaml_path = ticker_dir / "thesis.yaml"
+        thesis_path = ticker_dir / "thesis.md"
+        passed_path = ticker_dir / "passed.md"
+
+        # --- 1. thesis.yaml: upcoming kill-criteria catalysts ---
+        if yaml_path.exists():
+            try:
+                import yaml
+                with open(yaml_path, "r", encoding="utf-8") as f:
+                    data = yaml.safe_load(f)
+                if data:
+                    kill_criteria = data.get("kill_criteria") or []
+                    if isinstance(kill_criteria, list):
+                        for kc in kill_criteria:
+                            if not isinstance(kc, dict):
+                                continue
+                            expected = kc.get("expected_by", "")
+                            if not expected:
+                                continue
+                            # Only parse concrete date strings, skip "Q1 2026" style
+                            expected_str = str(expected)
+                            if "Q" in expected_str.upper():
+                                continue
+                            try:
+                                from dateutil.parser import parse as _parse
+                                cat_date = _parse(expected_str).replace(tzinfo=None)
+                                if today <= cat_date <= five_days_out:
+                                    ideas.append({
+                                        "ticker": ticker,
+                                        "direction": "关注",
+                                        "trigger": kc.get("criteria", "近期 kill criteria")[:30],
+                                        "time": cat_date.strftime("%b %d"),
+                                        "suggestion": "验证是否触发清仓条件",
+                                    })
+                            except Exception:
+                                pass
+            except Exception:
+                pass
+
+        # --- 2. thesis.md: conviction changes in last 7 days ---
+        if thesis_path.exists():
+            try:
+                text = thesis_path.read_text(encoding="utf-8")
+                # Look for "Conviction: X → Y" or "conviction: X" patterns in recent log entries
+                import re
+                # Match lines like: "Conviction: 3 → 4" or "conviction changed from 3 to 4"
+                arrow_hits = re.findall(
+                    r"conviction[:\s]+(\d)\s*[→\->]+\s*(\d)",
+                    text,
+                    re.IGNORECASE,
+                )
+                if arrow_hits:
+                    # Check if the section containing this hit is recent (within 7 days)
+                    # Heuristic: look for a date stamp nearby
+                    date_pattern = re.compile(r"(\d{4}-\d{2}-\d{2})")
+                    dated_sections = list(date_pattern.finditer(text))
+                    for match in re.finditer(
+                        r"conviction[:\s]+(\d)\s*[→\->]+\s*(\d)",
+                        text,
+                        re.IGNORECASE,
+                    ):
+                        # Find nearest date before this position
+                        pos = match.start()
+                        nearest_date_str = None
+                        for dm in reversed(dated_sections):
+                            if dm.start() <= pos:
+                                nearest_date_str = dm.group(1)
+                                break
+                        if nearest_date_str:
+                            try:
+                                entry_date = datetime.strptime(nearest_date_str, "%Y-%m-%d")
+                                if entry_date >= seven_days_ago:
+                                    old_c, new_c = match.group(1), match.group(2)
+                                    arrow = "↑" if int(new_c) > int(old_c) else "↓"
+                                    ideas.append({
+                                        "ticker": ticker,
+                                        "direction": "持有" if arrow == "↑" else "减仓",
+                                        "trigger": f"Conviction {arrow} ({old_c}→{new_c})",
+                                        "time": nearest_date_str,
+                                        "suggestion": "复查最新 thesis 更新",
+                                    })
+                                    break  # one entry per ticker
+                            except Exception:
+                                pass
+            except Exception:
+                pass
+
+        # --- 3. passed.md: revisit trigger check ---
+        if passed_path.exists():
+            try:
+                content = passed_path.read_text(encoding="utf-8")
+                if "price_at_pass:" in content or "revisit_trigger" in content:
+                    ideas.append({
+                        "ticker": ticker,
+                        "direction": "回顾",
+                        "trigger": "Revisit trigger check",
+                        "time": "—",
+                        "suggestion": "检查是否满足 revisit 条件",
+                    })
+            except Exception:
+                pass
+
+    if not ideas:
+        return ""
+
+    lines = ["", "## 💡 交易建议\n"]
+    lines.append("| Ticker | 方向 | 触发事件 | 时间 | 建议 |")
+    lines.append("|--------|------|---------|------|------|")
+    for idea in ideas:
+        lines.append(
+            f"| {idea['ticker']} | {idea['direction']} | {idea['trigger']} | {idea['time']} | {idea['suggestion']} |"
+        )
+    lines.append("")
+    return "\n".join(lines)
+
+
 def generate_brief(quick=False):
     """Generate the full morning brief."""
     date_str = datetime.now().strftime("%Y-%m-%d")
@@ -240,6 +523,30 @@ def generate_brief(quick=False):
 
     # 1. Portfolio tickers
     tickers = _get_portfolio_tickers()
+
+    # 1a. Overnight developments (pre/after-market movers >2%)
+    if tickers and not quick:
+        overnight_devs = _get_overnight_developments(tickers)
+        if overnight_devs:
+            lines.append("## 🌙 隔夜动态\n")
+            for d in overnight_devs:
+                headline_str = f' — "{d["headline"]}"' if d["headline"] else ""
+                sign = "+" if d["change_pct"] > 0 else ""
+                lines.append(f"**{d['ticker']}**: {sign}{d['change_pct']:.1f}% ({d['session']}){headline_str}")
+            lines.append("")
+
+    # 1b. Yesterday's earnings reaction
+    if tickers and not quick:
+        earnings_rows = _get_earnings_reaction(tickers)
+        if earnings_rows:
+            lines.append("## 📊 昨日财报反应\n")
+            lines.append("| 公司 | EPS 预期 | EPS 实际 | 收入预期 | 收入实际 | 盘后反应 |")
+            lines.append("|------|---------|---------|---------|---------|---------|")
+            for r in earnings_rows:
+                lines.append(
+                    f"| {r['ticker']} | {r['eps_est']} | {r['eps_act']} | {r['rev_est']} | {r['rev_act']} | {r['reaction']} |"
+                )
+            lines.append("")
 
     # 2. Market data
     if tickers:
@@ -259,6 +566,19 @@ def generate_brief(quick=False):
                 lines.append(f"**异动 ticker（>3%）：** {', '.join(big_movers)} — 建议 WebSearch 查新闻\n")
         else:
             lines.append("*市场数据暂不可用*\n")
+
+    # Overnight alerts (from price monitor)
+    overnight = _get_overnight_alerts()
+    if overnight:
+        lines.append("")
+        lines.append("## 异动监控回顾")
+        lines.append("")
+        lines.append("| Ticker | 变动 | 量比 | 原因 |")
+        lines.append("|--------|------|------|------|")
+        for a in overnight:
+            lines.append(
+                f"| {a['ticker']} | {a['change_pct']:+.1f}% | {a.get('volume_ratio', 'N/A')}x | {a.get('reason', 'N/A')[:40]} |"
+            )
 
     # 3. Tasks
     lines.append("## ✅ 今日任务\n")
@@ -346,11 +666,27 @@ def generate_brief(quick=False):
             lines.append(f"## 📚 知识库\n")
             lines.append(f"- 昨日新增 {kb_count} 份研究资料\n")
 
-    # 7. 13F deadline
+    # 7. Consensus downgrade alerts
+    if tickers and not quick:
+        try:
+            from shared.consensus_data import scan_portfolio_downgrades, render_alerts_md
+            alerts = scan_portfolio_downgrades(tickers[:10], track=True)
+            if alerts:
+                lines.append(render_alerts_md(alerts))
+        except Exception:
+            pass
+
+    # 8. 13F deadline
     deadline_msg = _check_13f_deadline()
     if deadline_msg:
         lines.append(f"## 📅 提醒\n")
         lines.append(f"- {deadline_msg}\n")
+
+    # 9. Trade ideas (catalyst-driven, conviction changes, revisit triggers)
+    if not quick:
+        trade_ideas_block = generate_trade_ideas()
+        if trade_ideas_block:
+            lines.append(trade_ideas_block)
 
     return "\n".join(lines)
 
@@ -359,13 +695,11 @@ def main():
     quick = "--quick" in sys.argv
 
     brief = generate_brief(quick=quick)
-    print(brief)
 
-    # Save to Obsidian
+    # Save to Obsidian first (before print, which can fail if stdout closed)
     date_str = datetime.now().strftime("%Y-%m-%d")
     output_file = OUTPUT_DIR / f"{date_str} - 晨间简报.md"
 
-    # Add frontmatter
     content = f"""---
 tags: [morning-brief, auto-generated]
 date: {date_str}
@@ -378,7 +712,14 @@ type: morning-brief
     OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
     with open(output_file, "w", encoding="utf-8") as f:
         f.write(content)
-    print(f"\n💾 Saved to: {output_file.relative_to(VAULT_DIR)}")
+
+    try:
+        print(brief)
+        print(f"\n💾 Saved to: {output_file.relative_to(VAULT_DIR)}")
+    except ValueError:
+        # stdout may be closed in some environments
+        import sys as _sys
+        _sys.stderr.write(f"💾 Saved to: {output_file.relative_to(VAULT_DIR)}\n")
 
 
 if __name__ == "__main__":

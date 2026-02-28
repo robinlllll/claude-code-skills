@@ -2,12 +2,12 @@
 """
 Price Movement Monitor Daemon.
 
-Checks portfolio tickers every 10 minutes during US market hours.
-Sends Telegram alerts when significant price moves are detected.
-Calendar-aware: extends monitoring to pre/post market for earnings tickers.
+Checks portfolio tickers twice per day (open 9:35 AM + close 4:05 PM ET).
+Sends one Telegram alert per ticker when daily change >= 5%.
+News attribution via Finnhub + Gemini Flash.
 
 CLI:
-    python price_monitor.py --daemon    # run continuously
+    python price_monitor.py --daemon    # run continuously (twice daily)
     python price_monitor.py --once      # single check and exit
     python price_monitor.py --status    # show current state
     python price_monitor.py --test      # test alert (dry run)
@@ -33,11 +33,6 @@ if sys.platform == "win32":
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from shared.config import (
-    PRICE_CHECK_INTERVAL_SECONDS,
-    PRICE_INTRADAY_THRESHOLD_PCT,
-    PRICE_RAPID_THRESHOLD_PCT,
-    PRICE_VOLUME_THRESHOLD_RATIO,
-    PRICE_DEDUP_WINDOW_HOURS,
     GEMINI_API_KEY,
     DATA_DIR,
     LOGS_DIR,
@@ -284,7 +279,7 @@ def get_portfolio_tickers() -> list[str]:
 
     # Normalize IBKR → yfinance format
     normalized = []
-    for t in raw_tickers[:20]:
+    for t in raw_tickers:
         yf_ticker = normalize_ticker_for_yfinance(t)
         if yf_ticker:
             normalized.append(yf_ticker)
@@ -420,69 +415,31 @@ def fetch_avg_volume(tickers: list[str]) -> dict[str, float]:
 
 # ── Trigger checks ─────────────────────────────────────────────────────────────
 
-def check_triggers(
-    prices: dict[str, dict],
-    avg_volumes: dict[str, float],
-    last_prices: dict[str, float],
-) -> list[dict]:
-    """
-    Check three trigger conditions for each ticker:
-    1. Daily change > PRICE_INTRADAY_THRESHOLD_PCT (%)
-    2. Rapid change since last check > PRICE_RAPID_THRESHOLD_PCT (%)
-    3. Volume > PRICE_VOLUME_THRESHOLD_RATIO × 20-day avg
+ALERT_THRESHOLD_PCT = 5.0  # Daily change threshold
 
-    Returns a list of alert dicts: {ticker, price, change_pct, rapid_pct, volume_ratio, triggers}
-    """
+def check_triggers(prices: dict[str, dict]) -> list[dict]:
+    """Return tickers where daily change >= 5%."""
     alerts = []
-
     for ticker, pdata in prices.items():
         price = pdata.get("price")
         change_pct = pdata.get("change_pct", 0.0)
-        volume = pdata.get("volume", 0)
-        avg_vol = avg_volumes.get(ticker, 0)
-
+        prev_close = pdata.get("prev_close")
         if price is None:
             continue
-
-        triggers = []
-        rapid_pct = None
-
-        # Trigger 1: Intraday daily change
-        if abs(change_pct) >= PRICE_INTRADAY_THRESHOLD_PCT:
-            triggers.append("intraday")
-
-        # Trigger 2: Rapid change since last check
-        if ticker in last_prices and last_prices[ticker] and last_prices[ticker] > 0:
-            rapid_pct = (price - last_prices[ticker]) / last_prices[ticker] * 100
-            if abs(rapid_pct) >= PRICE_RAPID_THRESHOLD_PCT:
-                triggers.append("rapid")
-
-        # Trigger 3: Volume spike
-        volume_ratio = None
-        if avg_vol and avg_vol > 0 and volume > 0:
-            volume_ratio = volume / avg_vol
-            if volume_ratio >= PRICE_VOLUME_THRESHOLD_RATIO:
-                triggers.append("volume")
-
-        if triggers:
+        if abs(change_pct) >= ALERT_THRESHOLD_PCT:
             alerts.append({
                 "ticker": ticker,
                 "price": price,
+                "prev_close": prev_close,
                 "change_pct": change_pct,
-                "rapid_pct": rapid_pct,
-                "volume": volume,
-                "avg_volume": avg_vol,
-                "volume_ratio": volume_ratio,
-                "triggers": triggers,
                 "checked_at": datetime.now(timezone.utc).isoformat(),
             })
-
     return alerts
 
 
-# ── News + Gemini attribution ─────────────────────────────────────────────────
+# ── News (Yahoo Finance) + Gemini attribution ───────────────────────────────
 
-def _fetch_yahoo_news(ticker: str) -> list[str]:
+def _fetch_news(ticker: str) -> list[str]:
     """Fetch recent Yahoo Finance news headlines for a ticker."""
     try:
         import yfinance as yf
@@ -490,7 +447,11 @@ def _fetch_yahoo_news(ticker: str) -> list[str]:
         news = tk.news or []
         headlines = []
         for item in news[:5]:
-            title = item.get("title", "")
+            # yfinance >= 0.2.36: nested under item["content"]["title"]
+            content = item.get("content", {})
+            title = content.get("title", "") if isinstance(content, dict) else ""
+            if not title:
+                title = item.get("title", "")
             if title:
                 headlines.append(title)
         return headlines
@@ -499,17 +460,16 @@ def _fetch_yahoo_news(ticker: str) -> list[str]:
         return []
 
 
-@retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=2, max=30))
 def search_reason(ticker: str, change_pct: float) -> str:
     """
     Use Yahoo Finance news + Gemini Flash to generate a one-sentence
-    explanation of why the stock is moving.
+    explanation of why the stock is moving. Returns empty string if no news.
     """
-    headlines = _fetch_yahoo_news(ticker)
+    headlines = _fetch_news(ticker)
     direction = "上涨" if change_pct >= 0 else "下跌"
 
     if not headlines:
-        return f"{ticker} 暂无近期新闻"
+        return ""
 
     news_block = "\n".join(f"- {h}" for h in headlines)
     prompt = (
@@ -523,18 +483,8 @@ def search_reason(ticker: str, change_pct: float) -> str:
         return "; ".join(headlines[:2])
 
     try:
-        import google.generativeai as genai
-        genai.configure(api_key=GEMINI_API_KEY)
-        model = genai.GenerativeModel(MODEL_GEMINI_FLASH)
-        response = model.generate_content(prompt)
-        return response.text.strip()
-    except Exception:
-        pass
-
-    # Try new google.genai SDK
-    try:
-        from google import genai as new_genai
-        client = new_genai.Client(api_key=GEMINI_API_KEY)
+        from google import genai
+        client = genai.Client(api_key=GEMINI_API_KEY)
         response = client.models.generate_content(
             model=MODEL_GEMINI_FLASH,
             contents=prompt,
@@ -547,313 +497,272 @@ def search_reason(ticker: str, change_pct: float) -> str:
 
 # ── Alert sending ─────────────────────────────────────────────────────────────
 
-def _build_telegram_message(alert: dict, reason: str, event_context: dict | None = None) -> str:
-    """Build the Telegram alert message. event_context from calendar if available."""
+def _build_telegram_message(alert: dict, reason: str, session: str = "") -> str:
+    """Build a concise Telegram alert message."""
     ticker = alert["ticker"]
     price = alert["price"]
+    prev_close = alert.get("prev_close")
     change_pct = alert["change_pct"]
-    volume_ratio = alert.get("volume_ratio")
-    rapid_pct = alert.get("rapid_pct")
-    triggers = alert.get("triggers", [])
-    session_tag = alert.get("session_tag", "")  # e.g., "PRE-MARKET", "POST-MARKET"
 
     direction_emoji = "📈" if change_pct >= 0 else "📉"
     change_sign = "+" if change_pct >= 0 else ""
 
-    header = f"{direction_emoji} *{ticker}* {change_sign}{change_pct:.1f}% (${price:.2f})"
-    if session_tag:
-        header += f" — {session_tag}"
-    msg_lines = [header]
+    msg_lines = [f"{direction_emoji} *{ticker}* {session} {change_sign}{change_pct:.1f}%"]
 
-    # Event context line (earnings / investor day)
-    if event_context:
-        event_type = event_context.get("event_type", "")
-        session = event_context.get("session", "")
-        if "Earnings" in event_type:
-            session_zh = {"BMO": "盘前", "AMC": "盘后"}.get(session, "")
-            msg_lines.append(f"⚡ {session_zh}财报日")
-        elif event_type in ("Analyst Meeting", "Special Situation", "Guidance Call"):
-            msg_lines.append(f"🎤 {event_type}")
-
-    # Triggers line
-    trigger_parts = []
-    if "intraday" in triggers:
-        trigger_parts.append(f"日内 {change_sign}{change_pct:.1f}%")
-    if "rapid" in triggers and rapid_pct is not None:
-        rapid_sign = "+" if rapid_pct >= 0 else ""
-        trigger_parts.append(f"急速 {rapid_sign}{rapid_pct:.1f}%")
-    if "volume" in triggers and volume_ratio is not None:
-        trigger_parts.append(f"量比 {volume_ratio:.1f}x")
-
-    if trigger_parts:
-        msg_lines.append(f"触发: {', '.join(trigger_parts)}")
-
-    if volume_ratio is not None and "volume" not in triggers:
-        msg_lines.append(f"量比: {volume_ratio:.1f}x")
+    if prev_close:
+        msg_lines.append(f"${price:.2f} ← ${prev_close:.2f}")
+    else:
+        msg_lines.append(f"${price:.2f}")
 
     if reason:
         msg_lines.append(f"原因: {reason}")
 
-    # Suggest next action for earnings
-    if event_context and "Earnings" in event_context.get("event_type", ""):
-        msg_lines.append(f"→ /organizer-transcript {ticker}")
-
     return "\n".join(msg_lines)
 
 
-def log_alert(alert: dict, reason: str) -> None:
+def log_alert(alert: dict, reason: str, session: str = "") -> None:
     """Append alert to JSONL log file."""
     from jsonl_utils import safe_jsonl_append
 
-    record = {**alert, "reason": reason, "logged_at": datetime.now(timezone.utc).isoformat()}
+    record = {**alert, "reason": reason, "session": session, "logged_at": datetime.now(timezone.utc).isoformat()}
     try:
         safe_jsonl_append(PRICE_ALERTS_LOG, record)
     except Exception as e:
         logger.warning(f"Failed to write to JSONL log: {e}")
 
 
-def send_alert(alert: dict, reason: str) -> bool:
-    """Send Telegram alert and log to JSONL. Returns True if sent."""
-    msg = _build_telegram_message(alert, reason)
-    logger.info(f"Sending alert: {msg[:120].replace(chr(10), ' ')}")
-    sent = telegram_notify(msg)
-    log_alert(alert, reason)
-    return sent
-
-
 # ── Main run_once ─────────────────────────────────────────────────────────────
 
-def _load_calendar_context() -> tuple[dict[str, str], dict[str, dict]]:
+def run_once(session: str = "", dry_run: bool = False) -> list[dict]:
     """
-    Load today's calendar events. Returns:
-    - earnings_map: {ticker: "BMO"|"AMC"|...} for tickers with earnings
-    - event_lookup: {ticker: {event_type, session, ...}} for all event tickers
-    """
-    try:
-        from shared.calendar_events import (
-            get_earnings_tickers_today,
-            get_investor_event_tickers_today,
-            get_todays_events,
-            format_events_summary,
-        )
-        earnings_map = get_earnings_tickers_today()
-        investor_map = get_investor_event_tickers_today()
-
-        # Merge investor events into earnings_map with "INVESTOR" session tag
-        for ticker, etype in investor_map.items():
-            if ticker not in earnings_map:
-                earnings_map[ticker] = "INVESTOR"
-
-        # Build lookup for enriched alerts
-        event_lookup = {}
-        for e in get_todays_events():
-            t = e.get("ticker")
-            if t and t not in event_lookup:
-                event_lookup[t] = e
-
-        if earnings_map:
-            summary = format_events_summary(get_todays_events())
-            if summary:
-                logger.info(f"Calendar events today:\n{summary}")
-
-        return earnings_map, event_lookup
-    except Exception as e:
-        logger.debug(f"Calendar events not available: {e}")
-        return {}, {}
-
-
-def run_once(dry_run: bool = False) -> list[dict]:
-    """
-    Single check cycle:
-    1. Load calendar context (earnings, investor events)
-    2. Fetch portfolio tickers
-    3. Fetch current prices
-    4. Load/save state (last_prices, avg_volumes)
-    5. Check triggers
-    6. Dedup + send alerts with event context
+    Single check cycle (open or close):
+    1. Fetch portfolio tickers
+    2. Fetch current prices
+    3. Check 5% threshold
+    4. Send one Telegram message per triggered ticker
     Returns list of alerts fired.
     """
-    conn = get_db()
-    purge_old_dedup(conn)
-
-    # Load calendar context
-    earnings_map, event_lookup = _load_calendar_context()
-
     tickers = get_portfolio_tickers()
     if not tickers:
         logger.warning("No portfolio tickers found — skipping cycle")
-        conn.close()
         return []
 
-    logger.info(f"Checking {len(tickers)} tickers: {', '.join(tickers)}")
-
-    # Load state
-    last_prices: dict[str, float] = load_state(conn, "last_prices")
-    avg_volumes: dict[str, float] = load_state(conn, "avg_volumes")
+    logger.info(f"[{session}] Checking {len(tickers)} tickers: {', '.join(tickers)}")
 
     # Fetch current prices
     try:
         prices = fetch_prices(tickers)
     except Exception as e:
         logger.error(f"fetch_prices failed: {e}")
-        conn.close()
         return []
 
     if not prices:
         logger.warning("No price data returned")
-        conn.close()
         return []
 
-    # Refresh avg_volumes if empty or stale (once per session is fine)
-    if not avg_volumes:
-        try:
-            avg_volumes = fetch_avg_volume(tickers)
-            save_state(conn, "avg_volumes", avg_volumes)
-        except Exception as e:
-            logger.warning(f"fetch_avg_volume failed: {e}")
-            avg_volumes = {}
-
-    # Update last_prices for next cycle
-    new_last_prices = {t: d["price"] for t, d in prices.items() if d.get("price") is not None}
-
-    # Check triggers
-    triggered = check_triggers(prices, avg_volumes, last_prices)
+    # Check 5% threshold
+    triggered = check_triggers(prices)
     alerts_sent = []
+
+    if not triggered:
+        logger.info(f"[{session}] No tickers above {ALERT_THRESHOLD_PCT}% threshold")
+        return []
+
+    logger.info(f"[{session}] {len(triggered)} ticker(s) above threshold")
 
     for alert in triggered:
         ticker = alert["ticker"]
         change_pct = alert["change_pct"]
-        direction = "up" if change_pct >= 0 else "down"
 
-        if already_alerted(conn, ticker, direction):
-            logger.info(f"  Dedup: {ticker} {direction} already alerted recently, skipping")
-            continue
-
-        # Look up calendar event context for this ticker
-        # Match by raw ticker (yfinance format) — strip suffix for calendar lookup
-        cal_ticker = ticker.split(".")[0] if "." in ticker else ticker
-        event_ctx = event_lookup.get(cal_ticker)
-
-        # Tag session if in extended hours
-        if not is_market_hours() and cal_ticker in earnings_map:
-            session = earnings_map[cal_ticker]
-            alert["session_tag"] = {"BMO": "PRE-MARKET", "AMC": "POST-MARKET"}.get(session, "")
-
-        # Get attribution
+        # Get Finnhub news + Gemini attribution
         try:
             reason = search_reason(ticker, change_pct)
         except Exception as e:
             logger.warning(f"search_reason failed for {ticker}: {e}")
             reason = ""
 
+        msg = _build_telegram_message(alert, reason, session)
+
         if dry_run:
-            msg = _build_telegram_message(alert, reason, event_ctx)
             logger.info(f"[DRY RUN] Would send:\n{msg}")
             alerts_sent.append(alert)
         else:
-            msg = _build_telegram_message(alert, reason, event_ctx)
-            logger.info(f"Sending alert: {msg[:120].replace(chr(10), ' ')}")
+            logger.info(f"Sending: {msg[:100].replace(chr(10), ' ')}")
             sent = telegram_notify(msg)
-            log_alert(alert, reason)
+            log_alert(alert, reason, session)
             if sent:
-                record_dedup(conn, ticker, direction)
                 alerts_sent.append(alert)
-                logger.info(f"  Alert sent for {ticker} ({direction})")
+                logger.info(f"  Sent: {ticker} ({'+' if change_pct >= 0 else ''}{change_pct:.1f}%)")
             else:
                 logger.warning(f"  Failed to send alert for {ticker}")
 
-    # Save updated last_prices
-    save_state(conn, "last_prices", new_last_prices)
-    conn.close()
-
-    logger.info(f"Cycle complete: {len(triggered)} triggered, {len(alerts_sent)} sent")
+    logger.info(f"[{session}] Done: {len(alerts_sent)}/{len(triggered)} sent")
     return alerts_sent
 
 
 # ── Daemon loop ───────────────────────────────────────────────────────────────
 
-def run_daemon() -> None:
-    """Run the price monitor daemon. Calendar-aware: extends to pre/post market for earnings."""
-    logger.info("Price monitor daemon started (calendar-aware)")
-    logger.info(f"  Interval: {PRICE_CHECK_INTERVAL_SECONDS}s ({PRICE_CHECK_INTERVAL_SECONDS // 60} min)")
-    logger.info(f"  Intraday threshold: {PRICE_INTRADAY_THRESHOLD_PCT}%")
-    logger.info(f"  Rapid threshold: {PRICE_RAPID_THRESHOLD_PCT}%")
-    logger.info(f"  Volume ratio threshold: {PRICE_VOLUME_THRESHOLD_RATIO}x")
-    logger.info(f"  Dedup window: {PRICE_DEDUP_WINDOW_HOURS}h")
-    logger.info(f"  Extended hours: enabled (earnings/investor events from /calendar)")
+def _send_events_reminder() -> None:
+    """
+    Send Telegram reminders for today's portfolio events (earnings, meetings, conferences).
+    Only sends for tickers in the portfolio. Also previews tomorrow's BMO earnings.
+    """
+    try:
+        from shared.calendar_events import get_todays_events
+    except ImportError:
+        logger.debug("calendar_events not available")
+        return
 
-    # Send daily events summary once per day
-    _last_summary_date = None
+    portfolio = set(t.split(".")[0] for t in get_portfolio_tickers())
+    if not portfolio:
+        return
+
+    events = get_todays_events()
+    if not events:
+        logger.info("No calendar events today")
+        return
+
+    # Filter to portfolio tickers only
+    portfolio_events = [e for e in events if e.get("ticker") and e["ticker"] in portfolio]
+    if not portfolio_events:
+        logger.info(f"No portfolio events today ({len(events)} total events)")
+        return
+
+    earnings = [e for e in portfolio_events if e["is_earnings"]]
+    meetings = [e for e in portfolio_events if e["is_investor_event"]]
+    conferences = [e for e in portfolio_events if e["event_type"] in ("Conference", "Conference by Participant")]
+
+    lines = ["📅 *今日持仓事件*"]
+
+    if earnings:
+        bmo = sorted(set(e["ticker"] for e in earnings if e["session"] == "BMO"))
+        amc = sorted(set(e["ticker"] for e in earnings if e["session"] == "AMC"))
+        other = sorted(set(e["ticker"] for e in earnings if e["session"] not in ("BMO", "AMC")))
+        parts = []
+        if bmo:
+            parts.append(f"盘前: {', '.join(bmo)}")
+        if amc:
+            parts.append(f"盘后: {', '.join(amc)}")
+        if other:
+            parts.append(f"其他: {', '.join(other)}")
+        lines.append(f"📊 *财报* — {' | '.join(parts)}")
+
+    if meetings:
+        for e in meetings:
+            lines.append(f"🎤 *{e['ticker']}* — {e['event_type']}")
+
+    if conferences:
+        tickers = sorted(set(e["ticker"] for e in conferences))
+        lines.append(f"📌 会议出席: {', '.join(tickers)}")
+
+    if len(lines) == 1:
+        return  # header only, no events
+
+    # Also check tomorrow for BMO earnings (heads-up)
+    tomorrow = datetime.now() + timedelta(days=1)
+    try:
+        tomorrow_events = get_todays_events(tomorrow)
+        tomorrow_bmo = [
+            e for e in tomorrow_events
+            if e.get("ticker") and e["ticker"] in portfolio
+            and e["is_earnings"] and e["session"] == "BMO"
+        ]
+        if tomorrow_bmo:
+            tickers = sorted(set(e["ticker"] for e in tomorrow_bmo))
+            lines.append(f"⏰ 明日盘前财报: {', '.join(tickers)}")
+    except Exception:
+        pass
+
+    msg = "\n".join(lines)
+    logger.info(f"Sending events reminder: {len(portfolio_events)} events")
+    telegram_notify(msg)
+
+
+def run_daemon() -> None:
+    """
+    Run the price monitor daemon.
+    - 8:00 AM ET: portfolio events reminder (earnings, meetings)
+    - 9:35 AM ET: open price check (>=5%)
+    - 4:05 PM ET: close price check (>=5%)
+    """
+    logger.info("Price monitor daemon started (open/close mode)")
+    logger.info(f"  Schedule: 8:00 AM (events) + 9:35 AM (open) + 4:05 PM (close) ET")
+    logger.info(f"  Threshold: {ALERT_THRESHOLD_PCT}%")
+    logger.info(f"  Alerts: one message per ticker")
 
     stop_file = DATA_DIR / "price_monitor.STOP"
+    checks_done_today: set[str] = set()  # {"events", "open", "close"}
+    last_date: str | None = None
 
     while True:
-        # Kill switch: exit if STOP file exists
+        # Kill switch
         if stop_file.exists():
             logger.info(f"STOP file detected ({stop_file}). Exiting daemon.")
-            telegram_notify("🛑 Price monitor stopped (STOP file detected)")
+            telegram_notify("🛑 Price monitor stopped")
             break
 
-        # Load calendar context for extended hours check
-        earnings_map = {}
-        try:
-            from shared.calendar_events import get_earnings_tickers_today, get_investor_event_tickers_today, format_events_summary, get_todays_events
-            earnings_map = get_earnings_tickers_today()
-            investor_map = get_investor_event_tickers_today()
-            for ticker, etype in investor_map.items():
-                if ticker not in earnings_map:
-                    earnings_map[ticker] = "INVESTOR"
+        now_et, _ = _get_et_now()
+        if now_et is None:
+            time.sleep(60)
+            continue
 
-            # Send daily events summary via Telegram (once per day, at first check)
-            today_str = datetime.now().strftime("%Y-%m-%d")
-            if earnings_map and _last_summary_date != today_str:
-                summary = format_events_summary(get_todays_events())
-                if summary:
-                    telegram_notify(f"📅 *今日财经日历*\n{summary}")
-                    logger.info(f"Sent daily calendar summary ({len(earnings_map)} event tickers)")
-                _last_summary_date = today_str
-        except Exception as e:
-            logger.debug(f"Calendar check failed: {e}")
+        # Reset checks on new day
+        today = now_et.strftime("%Y-%m-%d")
+        if today != last_date:
+            checks_done_today = set()
+            last_date = today
 
-        if is_market_hours():
+        # Skip weekends
+        if now_et.weekday() >= 5:
+            time.sleep(3600)
+            continue
+
+        hour_min = now_et.hour * 60 + now_et.minute
+
+        # Events reminder: after 8:00 AM ET — portfolio earnings/meetings today
+        if hour_min >= 8 * 60 and "events" not in checks_done_today:
+            logger.info("=== 事件提醒 ===")
             try:
-                run_once()
+                _send_events_reminder()
             except Exception as e:
-                logger.error(f"Unexpected error in run_once: {e}", exc_info=True)
-            time.sleep(PRICE_CHECK_INTERVAL_SECONDS)
-        elif is_extended_hours(earnings_map):
-            # Extended hours: check only earnings/event tickers
-            ext_tickers = get_extended_hours_tickers(earnings_map)
-            logger.info(f"Extended hours check: {', '.join(ext_tickers)}")
+                logger.error(f"Events reminder failed: {e}", exc_info=True)
+            checks_done_today.add("events")
+
+        # Open check: after 9:35 AM ET
+        if hour_min >= 9 * 60 + 35 and "open" not in checks_done_today:
+            logger.info("=== 开盘 check ===")
             try:
-                run_once()  # run_once will load calendar context itself
+                run_once(session="开盘")
             except Exception as e:
-                logger.error(f"Extended hours error: {e}", exc_info=True)
-            time.sleep(PRICE_CHECK_INTERVAL_SECONDS)
+                logger.error(f"Open check failed: {e}", exc_info=True)
+            checks_done_today.add("open")
+
+        # Close check: after 4:05 PM ET
+        if hour_min >= 16 * 60 + 5 and "close" not in checks_done_today:
+            logger.info("=== 收盘 check ===")
+            try:
+                run_once(session="收盘")
+            except Exception as e:
+                logger.error(f"Close check failed: {e}", exc_info=True)
+            checks_done_today.add("close")
+
+        # Calculate sleep until next check
+        if "events" not in checks_done_today:
+            target_min = 8 * 60
+        elif "open" not in checks_done_today:
+            target_min = 9 * 60 + 35
+        elif "close" not in checks_done_today:
+            target_min = 16 * 60 + 5
         else:
-            secs = seconds_until_next_market_open()
-            # Check if we need to wake up earlier for BMO earnings
-            early_wake = None
-            if earnings_map and any(s == "BMO" for s in earnings_map.values()):
-                # Wake up at 4 AM ET for BMO tickers
-                now_et, _ = _get_et_now()
-                if now_et and now_et.hour < 4:
-                    wake_at = now_et.replace(hour=4, minute=0, second=0)
-                    early_wake = int((wake_at - now_et).total_seconds())
+            # All done today — sleep until tomorrow
+            logger.info("All checks done. Sleeping until next trading day.")
+            time.sleep(3600)
+            continue
 
-            if early_wake and early_wake < secs:
-                sleep_secs = min(early_wake, 3600)
-                logger.info(
-                    f"Market closed. BMO earnings today — waking at 4 AM ET "
-                    f"(~{early_wake // 60} min). Sleeping {sleep_secs // 60} min."
-                )
-            else:
-                sleep_secs = min(secs, 3600)
-                logger.info(
-                    f"Market closed. Next open in ~{secs // 60} min. "
-                    f"Sleeping {sleep_secs // 60} min."
-                )
-            time.sleep(sleep_secs)
+        sleep_secs = max((target_min - hour_min) * 60, 60)
+        sleep_secs = min(sleep_secs, 3600)
+        logger.info(f"Next check in ~{sleep_secs // 60} min")
+        time.sleep(sleep_secs)
 
 
 # ── Status display ─────────────────────────────────────────────────────────────

@@ -1,0 +1,1625 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Unified Scheduling Dashboard</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'DM Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+            color: #e8e8e8;
+            overflow: hidden;
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+        }
+
+        /* ============================================================================
+           HEADER & NAVIGATION
+           ============================================================================ */
+
+        .header {
+            background: rgba(22, 33, 62, 0.95);
+            border-bottom: 1px solid #0f3460;
+            padding: 1rem 1.5rem;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            z-index: 100;
+        }
+
+        .header h1 {
+            font-size: 1.5rem;
+            font-weight: 700;
+            letter-spacing: -0.5px;
+        }
+
+        .header-time {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.875rem;
+            color: #8b8b9e;
+        }
+
+        /* View Tabs */
+        .view-tabs {
+            display: flex;
+            gap: 0.5rem;
+            background: rgba(15, 52, 96, 0.5);
+            padding: 0.5rem;
+            border-radius: 8px;
+            width: fit-content;
+            margin: 0 auto;
+            position: absolute;
+            left: 50%;
+            transform: translateX(-50%);
+        }
+
+        .tab {
+            padding: 0.5rem 1.25rem;
+            background: transparent;
+            border: 1px solid transparent;
+            color: #8b8b9e;
+            cursor: pointer;
+            border-radius: 6px;
+            font-size: 0.9rem;
+            font-weight: 500;
+            transition: all 0.2s ease;
+        }
+
+        .tab:hover {
+            background: rgba(83, 168, 182, 0.1);
+            color: #53a8b6;
+        }
+
+        .tab.active {
+            background: rgba(83, 168, 182, 0.2);
+            color: #53a8b6;
+            border-color: #53a8b6;
+            box-shadow: 0 0 12px rgba(83, 168, 182, 0.2);
+        }
+
+        /* ============================================================================
+           STATS BAR
+           ============================================================================ */
+
+        .stats-bar {
+            display: flex;
+            gap: 2rem;
+            padding: 1rem 1.5rem;
+            background: rgba(15, 52, 96, 0.3);
+            border-bottom: 1px solid #0f3460;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.85rem;
+        }
+
+        .stat-item {
+            display: flex;
+            flex-direction: column;
+            gap: 0.25rem;
+        }
+
+        .stat-value {
+            font-size: 1.25rem;
+            font-weight: 600;
+            letter-spacing: -0.5px;
+        }
+
+        .stat-label {
+            color: #8b8b9e;
+            font-size: 0.75rem;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .stat-item.critical .stat-value {
+            color: #e94560;
+        }
+
+        .stat-item.pending .stat-value {
+            color: #d4a574;
+        }
+
+        .stat-item.success .stat-value {
+            color: #53a8b6;
+        }
+
+        /* ============================================================================
+           MAIN CONTENT CONTAINER
+           ============================================================================ */
+
+        .container {
+            display: flex;
+            flex: 1;
+            overflow: hidden;
+            gap: 0;
+        }
+
+        .main-view {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+            position: relative;
+        }
+
+        .view-content {
+            flex: 1;
+            overflow: auto;
+            padding: 1.5rem;
+            display: none;
+            opacity: 0;
+            transition: opacity 0.3s ease;
+        }
+
+        .view-content.active {
+            display: flex;
+            opacity: 1;
+        }
+
+        /* ============================================================================
+           WEEK VIEW
+           ============================================================================ */
+
+        .week-view {
+            flex-direction: column;
+            gap: 1rem;
+        }
+
+        .week-header {
+            display: grid;
+            grid-template-columns: 80px repeat(7, 1fr);
+            gap: 0;
+            margin-bottom: 1rem;
+        }
+
+        .week-time-header {
+            display: flex;
+            align-items: flex-end;
+            justify-content: center;
+            padding: 0.5rem;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.7rem;
+            color: #8b8b9e;
+            text-transform: uppercase;
+        }
+
+        .week-day-header {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: flex-end;
+            padding: 1rem 0.5rem;
+            border-bottom: 2px solid #0f3460;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            background: rgba(15, 52, 96, 0.2);
+            border-radius: 6px 6px 0 0;
+            min-height: 80px;
+        }
+
+        .week-day-header:hover {
+            background: rgba(83, 168, 182, 0.1);
+        }
+
+        .week-day-header.today {
+            background: rgba(233, 69, 96, 0.1);
+            border-bottom-color: #e94560;
+        }
+
+        .week-day-name {
+            font-size: 0.85rem;
+            font-weight: 600;
+            text-transform: uppercase;
+            color: #53a8b6;
+        }
+
+        .week-day-date {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 1.1rem;
+            font-weight: 600;
+            margin-top: 0.25rem;
+        }
+
+        .week-grid {
+            display: grid;
+            grid-template-columns: 80px repeat(7, 1fr);
+            gap: 0;
+            flex: 1;
+            position: relative;
+            border: 1px solid #0f3460;
+            border-radius: 8px;
+            overflow: hidden;
+            background: rgba(15, 52, 96, 0.1);
+        }
+
+        .week-time-col {
+            border-right: 1px solid #0f3460;
+            background: rgba(15, 52, 96, 0.2);
+        }
+
+        .week-time-slot {
+            padding: 0.5rem;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.7rem;
+            color: #8b8b9e;
+            text-align: center;
+            border-bottom: 1px solid #0f3460;
+            height: 40px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .week-day-col {
+            position: relative;
+            border-right: 1px solid #0f3460;
+            background: rgba(15, 52, 96, 0.05);
+        }
+
+        .week-day-col:last-child {
+            border-right: none;
+        }
+
+        .week-day-slot {
+            height: 40px;
+            border-bottom: 1px solid #0f3460;
+            position: relative;
+        }
+
+        .week-event-block {
+            position: absolute;
+            left: 2px;
+            right: 2px;
+            min-height: 18px;
+            border-radius: 4px;
+            padding: 1px 4px;
+            font-size: 0.65rem;
+            font-weight: 600;
+            line-height: 1.2;
+            overflow: hidden;
+            white-space: nowrap;
+            text-overflow: ellipsis;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            cursor: pointer;
+            transition: all 0.2s ease;
+            display: flex;
+            align-items: center;
+            gap: 0.25rem;
+            z-index: 1;
+        }
+
+        .week-event-block:hover {
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
+            transform: translateY(-1px);
+            z-index: 10;
+            white-space: normal;
+            overflow: visible;
+            min-height: auto;
+        }
+
+        .week-event-block.calendar {
+            background: rgba(83, 168, 182, 0.3);
+            border-color: #53a8b6;
+            color: #53a8b6;
+        }
+
+        .week-event-block.task-p1 {
+            background: rgba(233, 69, 96, 0.3);
+            border-color: #e94560;
+            color: #e94560;
+        }
+
+        .week-event-block.task-p2 {
+            background: rgba(245, 166, 35, 0.3);
+            border-color: #f5a623;
+            color: #f5a623;
+        }
+
+        .week-event-block.task-p3 {
+            background: rgba(83, 168, 182, 0.2);
+            border-color: #53a8b6;
+            color: #53a8b6;
+        }
+
+        .week-event-block.task-p4 {
+            background: rgba(107, 107, 128, 0.2);
+            border-color: #6b6b80;
+            color: #8b8b9e;
+        }
+
+        .current-time-indicator {
+            position: absolute;
+            left: 0;
+            right: 0;
+            height: 2px;
+            background: #e94560;
+            box-shadow: 0 0 6px #e94560;
+            z-index: 10;
+        }
+
+        /* ============================================================================
+           DAY VIEW
+           ============================================================================ */
+
+        .day-view {
+            flex-direction: column;
+            gap: 1.5rem;
+        }
+
+        .day-header-top {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 1rem;
+        }
+
+        .day-title {
+            font-size: 1.75rem;
+            font-weight: 700;
+            letter-spacing: -0.5px;
+        }
+
+        .back-btn {
+            padding: 0.5rem 1rem;
+            background: rgba(83, 168, 182, 0.1);
+            border: 1px solid #53a8b6;
+            color: #53a8b6;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 0.9rem;
+            font-weight: 500;
+            transition: all 0.2s ease;
+        }
+
+        .back-btn:hover {
+            background: rgba(83, 168, 182, 0.2);
+            box-shadow: 0 0 12px rgba(83, 168, 182, 0.2);
+        }
+
+        .day-sections {
+            display: flex;
+            flex-direction: column;
+            gap: 1.5rem;
+            flex: 1;
+            overflow-y: auto;
+        }
+
+        .day-section {
+            display: flex;
+            flex-direction: column;
+            gap: 0.75rem;
+        }
+
+        .day-section-title {
+            font-size: 1rem;
+            font-weight: 600;
+            color: #d4a574;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            padding: 0.5rem 0;
+            border-bottom: 1px solid #0f3460;
+        }
+
+        .day-event-block {
+            background: rgba(22, 33, 62, 0.7);
+            border: 1px solid #0f3460;
+            border-radius: 6px;
+            padding: 1rem;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+            transition: all 0.2s ease;
+            cursor: pointer;
+        }
+
+        .day-event-block:hover {
+            background: rgba(22, 33, 62, 0.95);
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
+            transform: translateY(-2px);
+        }
+
+        .day-event-block.calendar {
+            border-left: 4px solid #53a8b6;
+        }
+
+        .day-event-block.task-p1 {
+            border-left: 4px solid #e94560;
+        }
+
+        .day-event-block.task-p2 {
+            border-left: 4px solid #f5a623;
+        }
+
+        .day-event-block.task-p3 {
+            border-left: 4px solid #53a8b6;
+        }
+
+        .day-event-block.task-p4 {
+            border-left: 4px solid #6b6b80;
+        }
+
+        .day-event-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            margin-bottom: 0.5rem;
+        }
+
+        .day-event-title {
+            font-weight: 600;
+            font-size: 1rem;
+            flex: 1;
+        }
+
+        .day-event-time {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.85rem;
+            color: #8b8b9e;
+            margin-left: 1rem;
+        }
+
+        .day-event-meta {
+            display: flex;
+            gap: 0.5rem;
+            margin-top: 0.75rem;
+            flex-wrap: wrap;
+        }
+
+        .tag {
+            background: rgba(83, 168, 182, 0.1);
+            border: 1px solid #53a8b6;
+            color: #53a8b6;
+            padding: 0.25rem 0.6rem;
+            border-radius: 4px;
+            font-size: 0.75rem;
+            font-weight: 500;
+            text-transform: uppercase;
+            letter-spacing: 0.3px;
+        }
+
+        .tag.ticker {
+            background: rgba(212, 165, 116, 0.1);
+            border-color: #d4a574;
+            color: #d4a574;
+        }
+
+        .tag.category {
+            background: rgba(233, 69, 96, 0.1);
+            border-color: #e94560;
+            color: #e94560;
+        }
+
+        .day-event-duration {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.75rem;
+            color: #8b8b9e;
+            margin-top: 0.5rem;
+        }
+
+        /* ============================================================================
+           MONTH VIEW
+           ============================================================================ */
+
+        .month-view {
+            flex-direction: column;
+            gap: 1rem;
+        }
+
+        .month-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 1rem;
+        }
+
+        .month-title {
+            font-size: 1.75rem;
+            font-weight: 700;
+            letter-spacing: -0.5px;
+        }
+
+        .month-grid {
+            display: grid;
+            grid-template-columns: repeat(7, 1fr);
+            gap: 8px;
+            flex: 1;
+        }
+
+        .month-day-header {
+            text-align: center;
+            padding: 0.75rem;
+            font-weight: 600;
+            text-transform: uppercase;
+            font-size: 0.85rem;
+            color: #53a8b6;
+            border-bottom: 2px solid #0f3460;
+        }
+
+        .month-day-cell {
+            background: rgba(22, 33, 62, 0.7);
+            border: 1px solid #0f3460;
+            border-radius: 6px;
+            padding: 0.75rem;
+            min-height: 100px;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            display: flex;
+            flex-direction: column;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .month-day-cell:hover {
+            background: rgba(22, 33, 62, 0.95);
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
+            transform: translateY(-2px);
+        }
+
+        .month-day-cell.other-month {
+            opacity: 0.4;
+        }
+
+        .month-day-cell.today {
+            background: rgba(233, 69, 96, 0.1);
+            border-color: #e94560;
+            box-shadow: 0 0 12px rgba(233, 69, 96, 0.2);
+        }
+
+        .month-day-num {
+            font-weight: 700;
+            font-size: 1rem;
+            margin-bottom: 0.5rem;
+            color: #d4a574;
+            font-family: 'JetBrains Mono', monospace;
+        }
+
+        .month-day-cell.today .month-day-num {
+            color: #e94560;
+        }
+
+        .month-day-indicators {
+            display: flex;
+            gap: 0.25rem;
+            margin-top: auto;
+        }
+
+        .day-indicator {
+            display: flex;
+            align-items: center;
+            gap: 0.25rem;
+            font-size: 0.7rem;
+            color: #8b8b9e;
+        }
+
+        .day-indicator::before {
+            content: '';
+            width: 4px;
+            height: 4px;
+            border-radius: 50%;
+            background: #53a8b6;
+        }
+
+        /* ============================================================================
+           TASK SIDEBAR
+           ============================================================================ */
+
+        .sidebar {
+            width: 300px;
+            background: rgba(22, 33, 62, 0.95);
+            border-left: 1px solid #0f3460;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+            z-index: 50;
+        }
+
+        .sidebar-header {
+            padding: 1.25rem;
+            border-bottom: 1px solid #0f3460;
+            font-weight: 600;
+            text-transform: uppercase;
+            font-size: 0.85rem;
+            letter-spacing: 0.5px;
+            color: #d4a574;
+        }
+
+        .sidebar-content {
+            flex: 1;
+            overflow-y: auto;
+            display: flex;
+            flex-direction: column;
+            gap: 1rem;
+            padding: 1.25rem;
+        }
+
+        .task-section {
+            display: flex;
+            flex-direction: column;
+            gap: 0.75rem;
+        }
+
+        .task-section-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            font-size: 0.85rem;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            cursor: pointer;
+            padding: 0.5rem 0;
+            border-bottom: 1px solid #0f3460;
+            color: #8b8b9e;
+        }
+
+        .task-section-header.overdue {
+            color: #e94560;
+        }
+
+        .task-section-header.due-today {
+            color: #f5a623;
+        }
+
+        .section-badge {
+            background: rgba(233, 69, 96, 0.2);
+            padding: 0.25rem 0.6rem;
+            border-radius: 4px;
+            font-size: 0.7rem;
+            font-weight: 700;
+            font-family: 'JetBrains Mono', monospace;
+            color: #e94560;
+        }
+
+        .section-badge.warning {
+            background: rgba(245, 166, 35, 0.2);
+            color: #f5a623;
+        }
+
+        .task-card {
+            background: rgba(15, 52, 96, 0.3);
+            border: 1px solid #0f3460;
+            border-radius: 6px;
+            padding: 0.75rem;
+            transition: all 0.2s ease;
+            cursor: pointer;
+            display: flex;
+            gap: 0.6rem;
+        }
+
+        .task-card:hover {
+            background: rgba(15, 52, 96, 0.6);
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+            border-color: #53a8b6;
+        }
+
+        .task-card.overdue {
+            border-left: 3px solid #e94560;
+        }
+
+        .task-card.due-today {
+            border-left: 3px solid #f5a623;
+        }
+
+        .task-card.unscheduled {
+            border-left: 3px solid #6b6b80;
+            opacity: 0.7;
+        }
+
+        .task-actions {
+            display: flex;
+            flex-direction: column;
+            gap: 3px;
+            opacity: 0;
+            transition: opacity 0.15s ease;
+            margin-left: auto;
+            flex-shrink: 0;
+        }
+
+        .task-card:hover .task-actions {
+            opacity: 1;
+        }
+
+        .task-btn {
+            width: 24px;
+            height: 24px;
+            border: 1px solid #0f3460;
+            border-radius: 4px;
+            background: rgba(15, 52, 96, 0.5);
+            color: #8b8b9e;
+            font-size: 13px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: all 0.15s ease;
+            padding: 0;
+            line-height: 1;
+        }
+
+        .task-btn:hover {
+            background: rgba(15, 52, 96, 0.9);
+            color: #e8e8e8;
+        }
+
+        .task-btn.done-btn:hover {
+            background: rgba(39, 174, 96, 0.4);
+            border-color: #27ae60;
+            color: #27ae60;
+        }
+
+        .task-btn.cancel-btn:hover {
+            background: rgba(233, 69, 96, 0.3);
+            border-color: #e94560;
+            color: #e94560;
+        }
+
+        .task-btn.start-btn:hover {
+            background: rgba(83, 168, 182, 0.3);
+            border-color: #53a8b6;
+            color: #53a8b6;
+        }
+
+        .task-btn.reschedule-btn:hover {
+            background: rgba(245, 166, 35, 0.3);
+            border-color: #f5a623;
+            color: #f5a623;
+        }
+
+        .task-priority-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            flex-shrink: 0;
+            margin-top: 0.35rem;
+        }
+
+        .task-priority-dot.p1 {
+            background: #e94560;
+            box-shadow: 0 0 4px #e94560;
+        }
+
+        .task-priority-dot.p2 {
+            background: #f5a623;
+        }
+
+        .task-priority-dot.p3 {
+            background: #53a8b6;
+        }
+
+        .task-priority-dot.p4 {
+            background: #6b6b80;
+        }
+
+        .task-content {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            gap: 0.25rem;
+        }
+
+        .task-title {
+            font-size: 0.85rem;
+            font-weight: 600;
+            color: #e8e8e8;
+            line-height: 1.3;
+        }
+
+        .task-meta {
+            display: flex;
+            gap: 0.3rem;
+            font-size: 0.65rem;
+            color: #8b8b9e;
+            flex-wrap: wrap;
+        }
+
+        .task-meta-item {
+            background: rgba(83, 168, 182, 0.1);
+            padding: 0.15rem 0.4rem;
+            border-radius: 3px;
+            text-transform: uppercase;
+            letter-spacing: 0.2px;
+        }
+
+        .task-meta-item.ticker {
+            background: rgba(212, 165, 116, 0.1);
+            color: #d4a574;
+        }
+
+        .task-due-date {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.7rem;
+            color: #8b8b9e;
+            margin-top: 0.25rem;
+        }
+
+        .empty-section {
+            text-align: center;
+            padding: 1rem;
+            color: #8b8b9e;
+            font-size: 0.85rem;
+        }
+
+        /* ============================================================================
+           SCROLLBAR STYLING
+           ============================================================================ */
+
+        ::-webkit-scrollbar {
+            width: 8px;
+            height: 8px;
+        }
+
+        ::-webkit-scrollbar-track {
+            background: rgba(15, 52, 96, 0.2);
+        }
+
+        ::-webkit-scrollbar-thumb {
+            background: rgba(83, 168, 182, 0.4);
+            border-radius: 4px;
+        }
+
+        ::-webkit-scrollbar-thumb:hover {
+            background: rgba(83, 168, 182, 0.6);
+        }
+
+        /* ============================================================================
+           RESPONSIVE
+           ============================================================================ */
+
+        @media (max-width: 1400px) {
+            .sidebar {
+                width: 280px;
+            }
+
+            .stats-bar {
+                gap: 1.5rem;
+                font-size: 0.8rem;
+            }
+
+            .stat-value {
+                font-size: 1.1rem;
+            }
+        }
+
+        @media (max-width: 1200px) {
+            .sidebar {
+                display: none;
+            }
+
+            .container {
+                flex-direction: column;
+            }
+        }
+
+        /* Animations */
+        @keyframes slideIn {
+            from {
+                opacity: 0;
+                transform: translateY(10px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        .view-content.active {
+            animation: slideIn 0.3s ease;
+        }
+    </style>
+</head>
+<body>
+    <!-- HEADER -->
+    <div class="header">
+        <h1>Dashboard</h1>
+        <div class="view-tabs">
+            <button class="tab active" data-view="week">Week</button>
+            <button class="tab" data-view="day">Day</button>
+            <button class="tab" data-view="month">Month</button>
+        </div>
+        <div class="header-time" id="current-time">12:00 PM</div>
+    </div>
+
+    <!-- STATS BAR -->
+    <div class="stats-bar">
+        <div class="stat-item">
+            <div class="stat-value" id="stat-total-pending">0</div>
+            <div class="stat-label">Total Pending</div>
+        </div>
+        <div class="stat-item critical" id="stat-overdue-container">
+            <div class="stat-value" id="stat-overdue">0</div>
+            <div class="stat-label">Overdue</div>
+        </div>
+        <div class="stat-item pending" id="stat-due-today-container">
+            <div class="stat-value" id="stat-due-today">0</div>
+            <div class="stat-label">Due Today</div>
+        </div>
+        <div class="stat-item success">
+            <div class="stat-value" id="stat-scheduled">0</div>
+            <div class="stat-label">Scheduled</div>
+        </div>
+        <div class="stat-item success">
+            <div class="stat-value" id="stat-completed">0</div>
+            <div class="stat-label">Completed This Week</div>
+        </div>
+    </div>
+
+    <!-- MAIN CONTAINER -->
+    <div class="container">
+        <!-- MAIN VIEW AREA -->
+        <div class="main-view">
+            <!-- WEEK VIEW -->
+            <div id="week-view" class="view-content active week-view">
+                <div class="week-header" id="week-header"></div>
+                <div class="week-grid" id="week-grid"></div>
+            </div>
+
+            <!-- DAY VIEW -->
+            <div id="day-view" class="view-content day-view">
+                <div class="day-header-top">
+                    <div class="day-title" id="day-title"></div>
+                    <button class="back-btn" onclick="switchView('week')">← Back to Week</button>
+                </div>
+                <div class="day-sections" id="day-sections"></div>
+            </div>
+
+            <!-- MONTH VIEW -->
+            <div id="month-view" class="view-content month-view">
+                <div class="month-header">
+                    <div class="month-title" id="month-title"></div>
+                </div>
+                <div class="month-grid" id="month-grid"></div>
+            </div>
+        </div>
+
+        <!-- TASK SIDEBAR -->
+        <div class="sidebar">
+            <div class="sidebar-header">Tasks</div>
+            <div class="sidebar-content" id="sidebar-content"></div>
+        </div>
+    </div>
+
+    <script>
+        // ========================================================================
+        // DATA INITIALIZATION
+        // ========================================================================
+
+        const DATA = __DASHBOARD_DATA__;
+
+        // Utility functions
+        function parseISO(dateString) {
+            if (!dateString) return null;
+            // Date-only strings (YYYY-MM-DD) are parsed as UTC midnight by JS,
+            // which shifts the date in local time for negative-offset timezones.
+            // Add T12:00:00 to keep the calendar date correct in any timezone.
+            if (/^\d{4}-\d{2}-\d{2}$/.test(dateString)) {
+                dateString += 'T12:00:00';
+            }
+            const d = new Date(dateString);
+            return isNaN(d.getTime()) ? null : d;
+        }
+
+        function toDateStr(date) {
+            if (!date) return '';
+            const y = date.getFullYear();
+            const m = String(date.getMonth() + 1).padStart(2, '0');
+            const d = String(date.getDate()).padStart(2, '0');
+            return `${y}-${m}-${d}`;
+        }
+
+        function formatTime(date) {
+            const hours = String(date.getHours()).padStart(2, '0');
+            const minutes = String(date.getMinutes()).padStart(2, '0');
+            return `${hours}:${minutes}`;
+        }
+
+        function formatDate(date) {
+            if (!date) return '';
+            const options = { month: 'short', day: 'numeric', year: 'numeric' };
+            return date.toLocaleDateString('en-US', options);
+        }
+
+        function getDayName(date) {
+            const days = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+            return days[date.getDay()];
+        }
+
+        function getMonthName(date) {
+            const months = ['January', 'February', 'March', 'April', 'May', 'June',
+                          'July', 'August', 'September', 'October', 'November', 'December'];
+            return months[date.getMonth()];
+        }
+
+        function hoursToPixels(hours) {
+            return hours * 40; // 40px per hour
+        }
+
+        function timeToPixels(timeStr) {
+            const [h, m] = timeStr.split(':').map(Number);
+            const hours = h - 7; // 7 AM is the start
+            return hours * 40 + (m / 60) * 40;
+        }
+
+        // ========================================================================
+        // VIEW MANAGEMENT
+        // ========================================================================
+
+        let currentView = 'week';
+        let selectedDate = parseISO(DATA.today);
+
+        function switchView(viewName, date = null) {
+            if (date) {
+                selectedDate = date;
+            }
+
+            currentView = viewName;
+
+            // Update tabs
+            document.querySelectorAll('.tab').forEach(tab => {
+                tab.classList.toggle('active', tab.dataset.view === viewName);
+            });
+
+            // Update views
+            document.querySelectorAll('.view-content').forEach(view => {
+                view.classList.remove('active');
+            });
+            document.getElementById(`${viewName}-view`).classList.add('active');
+
+            // Render appropriate view
+            if (viewName === 'week') {
+                renderWeekView();
+            } else if (viewName === 'day') {
+                renderDayView();
+            } else if (viewName === 'month') {
+                renderMonthView();
+            }
+        }
+
+        // ========================================================================
+        // UPDATE CURRENT TIME
+        // ========================================================================
+
+        function updateCurrentTime() {
+            const now = new Date();
+            const hours = String(now.getHours()).padStart(2, '0');
+            const minutes = String(now.getMinutes()).padStart(2, '0');
+            document.getElementById('current-time').textContent = `${hours}:${minutes}`;
+
+            // Update current time indicator in week view
+            if (currentView === 'week') {
+                updateTimeIndicator();
+            }
+        }
+
+        function updateTimeIndicator() {
+            const todayStr = DATA.today;
+            const now = new Date();
+            const hours = now.getHours();
+            const minutes = now.getMinutes();
+
+            if (hours >= 7 && hours < 22) {
+                const totalMinutes = (hours - 7) * 60 + minutes;
+                const pixelOffset = (totalMinutes / 60) * 40;
+
+                const existing = document.querySelector('.current-time-indicator');
+                if (existing) existing.remove();
+
+                const indicator = document.createElement('div');
+                indicator.className = 'current-time-indicator';
+                indicator.style.top = pixelOffset + 'px';
+                document.getElementById('week-grid').appendChild(indicator);
+            }
+        }
+
+        // Update time every minute
+        setInterval(updateCurrentTime, 60000);
+        updateCurrentTime();
+
+        // ========================================================================
+        // STATS RENDERING
+        // ========================================================================
+
+        function renderStats() {
+            const stats = DATA.stats || {};
+
+            document.getElementById('stat-total-pending').textContent = stats.total_pending || 0;
+            document.getElementById('stat-overdue').textContent = stats.overdue || 0;
+            document.getElementById('stat-due-today').textContent = stats.due_today || 0;
+            document.getElementById('stat-scheduled').textContent = stats.scheduled || 0;
+            document.getElementById('stat-completed').textContent = stats.completed_this_week || 0;
+
+            // Hide overdue stats if none
+            const overdueContainer = document.getElementById('stat-overdue-container');
+            const dueTodayContainer = document.getElementById('stat-due-today-container');
+
+            if ((stats.overdue || 0) > 0) {
+                overdueContainer.style.display = 'flex';
+            } else {
+                overdueContainer.style.display = 'none';
+            }
+
+            if ((stats.due_today || 0) > 0) {
+                dueTodayContainer.style.display = 'flex';
+            } else {
+                dueTodayContainer.style.display = 'none';
+            }
+        }
+
+        // ========================================================================
+        // WEEK VIEW RENDERING
+        // ========================================================================
+
+        function renderWeekView() {
+            const weekStart = parseISO(DATA.week_start);
+            const today = parseISO(DATA.today);
+
+            // Render header with day names and dates
+            const headerHtml = '<div class="week-time-header"></div>';
+            let headerContent = headerHtml;
+
+            for (let i = 0; i < 7; i++) {
+                const date = new Date(weekStart);
+                date.setDate(date.getDate() + i);
+                const isToday = formatDate(date) === formatDate(today);
+
+                const dayHtml = `
+                    <div class="week-day-header ${isToday ? 'today' : ''}" onclick="switchView('day', parseISO('${toDateStr(date)}'))">
+                        <div class="week-day-name">${getDayName(date).slice(0, 3)}</div>
+                        <div class="week-day-date">${date.getDate()}</div>
+                    </div>
+                `;
+                headerContent += dayHtml;
+            }
+
+            document.getElementById('week-header').innerHTML = headerContent;
+
+            // Render grid
+            let gridContent = '<div class="week-time-col">';
+
+            // Time column
+            for (let h = 7; h < 22; h++) {
+                const time = `${String(h).padStart(2, '0')}:00`;
+                gridContent += `<div class="week-time-slot">${time}</div>`;
+            }
+
+            gridContent += '</div>';
+
+            // Day columns
+            for (let d = 0; d < 7; d++) {
+                const date = new Date(weekStart);
+                date.setDate(date.getDate() + d);
+                const dateStr = toDateStr(date);
+                const isToday = dateStr === DATA.today;
+
+                gridContent += `<div class="week-day-col" data-date="${dateStr}">`;
+
+                for (let h = 7; h < 22; h++) {
+                    gridContent += `<div class="week-day-slot" data-hour="${h}"></div>`;
+                }
+
+                gridContent += '</div>';
+            }
+
+            document.getElementById('week-grid').innerHTML = gridContent;
+
+            // Add events
+            addWeekViewEvents();
+            updateTimeIndicator();
+        }
+
+        function addWeekViewEvents() {
+            const weekStart = parseISO(DATA.week_start);
+            const weekEnd = parseISO(DATA.week_end);
+
+            // Add calendar events
+            (DATA.calendar_events || []).forEach(event => {
+                const startTime = parseISO(event.start_time);
+                const endTime = parseISO(event.end_time);
+                if (!startTime || !endTime) return;
+
+                if (startTime >= weekStart && startTime <= weekEnd) {
+                    const dateStr = toDateStr(startTime);
+                    const dayCol = document.querySelector(`[data-date="${dateStr}"]`);
+
+                    if (dayCol) {
+                        const startHour = startTime.getHours();
+                        const startMinutes = startTime.getMinutes();
+                        const durationMinutes = (endTime - startTime) / 60000;
+                        const durationHours = durationMinutes / 60;
+
+                        const top = (startHour - 7) * 40 + (startMinutes / 60) * 40;
+                        const height = durationHours * 40;
+
+                        const block = document.createElement('div');
+                        block.className = 'week-event-block calendar';
+                        block.style.top = top + 'px';
+                        block.style.height = height + 'px';
+                        block.title = event.summary;
+                        block.textContent = event.summary;
+
+                        dayCol.appendChild(block);
+                    }
+                }
+            });
+
+            // Add scheduled tasks
+            (DATA.scheduled_blocks || []).forEach(task => {
+                const dateStr = task.scheduled_date;
+                const dayCol = document.querySelector(`[data-date="${dateStr}"]`);
+
+                if (dayCol) {
+                    const [startH, startM] = task.scheduled_start.split(':').map(Number);
+                    const [endH, endM] = task.scheduled_end.split(':').map(Number);
+
+                    const startMinutes = startH * 60 + startM;
+                    const endMinutes = endH * 60 + endM;
+                    const durationMinutes = endMinutes - startMinutes;
+
+                    const top = (startH - 7) * 40 + (startM / 60) * 40;
+                    const height = (durationMinutes / 60) * 40;
+
+                    const priorityClass = `task-p${task.priority}`;
+                    const block = document.createElement('div');
+                    block.className = `week-event-block ${priorityClass}`;
+                    block.style.top = top + 'px';
+                    block.style.height = height + 'px';
+                    block.title = task.title;
+                    block.textContent = task.title;
+
+                    dayCol.appendChild(block);
+                }
+            });
+        }
+
+        // ========================================================================
+        // DAY VIEW RENDERING
+        // ========================================================================
+
+        function renderDayView() {
+            const dayTitle = document.getElementById('day-title');
+            dayTitle.textContent = `${getDayName(selectedDate)}, ${formatDate(selectedDate)}`;
+
+            const dayStr = toDateStr(selectedDate);
+            const sections = {
+                morning: { title: 'Morning (7 AM - 12 PM)', events: [] },
+                afternoon: { title: 'Afternoon (12 PM - 5 PM)', events: [] },
+                evening: { title: 'Evening (5 PM - 10 PM)', events: [] }
+            };
+
+            // Add calendar events
+            (DATA.calendar_events || []).forEach(event => {
+                const startTime = parseISO(event.start_time);
+                if (!startTime) return;
+                if (toDateStr(startTime) === dayStr) {
+                    const hour = startTime.getHours();
+                    const endTime = parseISO(event.end_time);
+                    const section = hour < 12 ? 'morning' : hour < 17 ? 'afternoon' : 'evening';
+                    sections[section].events.push({
+                        type: 'calendar',
+                        title: event.summary,
+                        startTime: startTime,
+                        endTime: endTime || startTime,
+                        location: event.location,
+                        description: event.description
+                    });
+                }
+            });
+
+            // Add scheduled tasks
+            (DATA.scheduled_blocks || []).forEach(task => {
+                if (task.scheduled_date === dayStr) {
+                    const [h, m] = task.scheduled_start.split(':').map(Number);
+                    const section = h < 12 ? 'morning' : h < 17 ? 'afternoon' : 'evening';
+                    sections[section].events.push({
+                        type: 'task',
+                        ...task
+                    });
+                }
+            });
+
+            // Render sections
+            let content = '';
+            Object.values(sections).forEach(section => {
+                content += `<div class="day-section">
+                    <div class="day-section-title">${section.title}</div>
+                    ${section.events.length === 0 ? '<div class="empty-section">No events scheduled</div>' : ''}
+                    ${section.events.map(evt => renderDayEventBlock(evt)).join('')}
+                </div>`;
+            });
+
+            document.getElementById('day-sections').innerHTML = content;
+        }
+
+        function renderDayEventBlock(event) {
+            if (event.type === 'calendar') {
+                const startTime = formatTime(event.startTime);
+                const endTime = formatTime(event.endTime);
+
+                return `
+                    <div class="day-event-block calendar">
+                        <div class="day-event-header">
+                            <div class="day-event-title">${event.title}</div>
+                            <div class="day-event-time">${startTime} – ${endTime}</div>
+                        </div>
+                        ${event.location ? `<div class="day-event-meta"><span class="tag">${event.location}</span></div>` : ''}
+                    </div>
+                `;
+            } else {
+                const priorityClass = `task-p${event.priority}`;
+                const priorityName = event.priority_name || 'Unknown';
+
+                return `
+                    <div class="day-event-block ${priorityClass}">
+                        <div class="day-event-header">
+                            <div class="day-event-title">${event.title}</div>
+                            <div class="day-event-time">${event.scheduled_start} – ${event.scheduled_end}</div>
+                        </div>
+                        <div class="day-event-meta">
+                            ${event.ticker ? `<span class="tag ticker">${event.ticker}</span>` : ''}
+                            ${event.category ? `<span class="tag category">${event.category}</span>` : ''}
+                            <span class="tag">${priorityName}</span>
+                        </div>
+                        <div class="day-event-duration">${event.estimated_minutes} minutes</div>
+                    </div>
+                `;
+            }
+        }
+
+        // ========================================================================
+        // MONTH VIEW RENDERING
+        // ========================================================================
+
+        function renderMonthView() {
+            const monthStart = parseISO(DATA.month_start);
+            const monthEnd = parseISO(DATA.month_end);
+            const today = parseISO(DATA.today);
+
+            const monthTitle = document.getElementById('month-title');
+            monthTitle.textContent = `${getMonthName(monthStart)} ${monthStart.getFullYear()}`;
+
+            // Build month grid
+            let gridContent = '<div class="month-day-header">Mon</div>';
+            gridContent += '<div class="month-day-header">Tue</div>';
+            gridContent += '<div class="month-day-header">Wed</div>';
+            gridContent += '<div class="month-day-header">Thu</div>';
+            gridContent += '<div class="month-day-header">Fri</div>';
+            gridContent += '<div class="month-day-header">Sat</div>';
+            gridContent += '<div class="month-day-header">Sun</div>';
+
+            // Start from first Monday before month start
+            let current = new Date(monthStart);
+            while (current.getDay() !== 1) {
+                current.setDate(current.getDate() - 1);
+            }
+
+            // Fill month grid
+            while (current <= monthEnd || current.getDay() !== 1) {
+                const dateStr = toDateStr(current);
+                const isToday = dateStr === DATA.today;
+                const isOtherMonth = current < monthStart || current > monthEnd;
+
+                let eventCount = 0;
+                let taskCount = 0;
+
+                // Count events and tasks for this day
+                (DATA.calendar_events || []).forEach(event => {
+                    const eventDt = parseISO(event.start_time);
+                    if (!eventDt) return;
+                    const eventDate = toDateStr(eventDt);
+                    if (eventDate === dateStr) eventCount++;
+                });
+
+                (DATA.scheduled_blocks || []).forEach(task => {
+                    if (task.scheduled_date === dateStr) taskCount++;
+                });
+
+                let cellContent = `<div class="month-day-num">${current.getDate()}</div>`;
+
+                if (eventCount > 0 || taskCount > 0) {
+                    cellContent += '<div class="month-day-indicators">';
+                    if (eventCount > 0) {
+                        cellContent += `<div class="day-indicator" title="${eventCount} events">${eventCount}e</div>`;
+                    }
+                    if (taskCount > 0) {
+                        cellContent += `<div class="day-indicator" title="${taskCount} tasks">${taskCount}t</div>`;
+                    }
+                    cellContent += '</div>';
+                }
+
+                const cellClass = `month-day-cell ${isToday ? 'today' : ''} ${isOtherMonth ? 'other-month' : ''}`;
+                gridContent += `<div class="${cellClass}" onclick="switchView('day', parseISO('${toDateStr(current)}'))">${cellContent}</div>`;
+
+                if (current > monthEnd && current.getDay() === 0) break;
+                current.setDate(current.getDate() + 1);
+            }
+
+            document.getElementById('month-grid').innerHTML = gridContent;
+        }
+
+        // ========================================================================
+        // SIDEBAR RENDERING
+        // ========================================================================
+
+        function renderSidebar() {
+            const overdueTasks = DATA.overdue_tasks || [];
+            const dueTodayTasks = DATA.today_tasks || [];
+            const unscheduledTasks = DATA.unscheduled_tasks || [];
+
+            let content = '';
+
+            // Overdue section
+            if (overdueTasks.length > 0) {
+                content += `<div class="task-section">
+                    <div class="task-section-header overdue">
+                        Overdue
+                        <span class="section-badge">${overdueTasks.length}</span>
+                    </div>
+                    ${overdueTasks.map(task => renderTaskCard(task, 'overdue')).join('')}
+                </div>`;
+            }
+
+            // Due Today section
+            if (dueTodayTasks.length > 0) {
+                content += `<div class="task-section">
+                    <div class="task-section-header due-today">
+                        Due Today
+                        <span class="section-badge warning">${dueTodayTasks.length}</span>
+                    </div>
+                    ${dueTodayTasks.map(task => renderTaskCard(task, 'due-today')).join('')}
+                </div>`;
+            }
+
+            // This Week section
+            const thisWeekTasks = (DATA.tasks || []).filter(t => {
+                const dueAt = t.due_at ? toDateStr(parseISO(t.due_at)) : null;
+                const today = toDateStr(parseISO(DATA.today));
+                const weekEnd = toDateStr(parseISO(DATA.week_end));
+                return dueAt && dueAt > today && dueAt <= weekEnd;
+            });
+
+            if (thisWeekTasks.length > 0) {
+                content += `<div class="task-section">
+                    <div class="task-section-header">
+                        This Week
+                        <span class="section-badge warning">${thisWeekTasks.length}</span>
+                    </div>
+                    ${thisWeekTasks.map(task => renderTaskCard(task, 'week')).join('')}
+                </div>`;
+            }
+
+            // Unscheduled section
+            if (unscheduledTasks.length > 0) {
+                content += `<div class="task-section">
+                    <div class="task-section-header">
+                        Unscheduled
+                        <span class="section-badge warning">${unscheduledTasks.length}</span>
+                    </div>
+                    ${unscheduledTasks.map(task => renderTaskCard(task, 'unscheduled')).join('')}
+                </div>`;
+            }
+
+            if (!content) {
+                content = '<div class="empty-section">No tasks</div>';
+            }
+
+            document.getElementById('sidebar-content').innerHTML = content;
+        }
+
+        // ========================================================================
+        // INTERACTIVE API LAYER
+        // ========================================================================
+
+        const IS_LIVE = window.location.protocol === 'http:' || window.location.protocol === 'https:';
+
+        async function taskAction(taskId, action, body) {
+            if (!IS_LIVE) {
+                alert('Interactive mode requires the dashboard server.\nRun: python dashboard_server.py');
+                return;
+            }
+            try {
+                const opts = { method: 'POST' };
+                if (body) {
+                    opts.headers = { 'Content-Type': 'application/json' };
+                    opts.body = JSON.stringify(body);
+                }
+                const res = await fetch(`/api/task/${taskId}/${action}`, opts);
+                const data = await res.json();
+                if (data.ok) {
+                    window.location.reload();
+                } else {
+                    alert(data.error || 'Action failed');
+                }
+            } catch (e) {
+                alert('Server error: ' + e.message);
+            }
+        }
+
+        function handleDone(taskId, event) {
+            event.stopPropagation();
+            taskAction(taskId, 'done');
+        }
+
+        function handleCancel(taskId, event) {
+            event.stopPropagation();
+            if (confirm('Cancel this task?')) {
+                taskAction(taskId, 'cancel');
+            }
+        }
+
+        function handleStart(taskId, event) {
+            event.stopPropagation();
+            taskAction(taskId, 'start');
+        }
+
+        function handleReschedule(taskId, event) {
+            event.stopPropagation();
+            const newDate = prompt('New due date (YYYY-MM-DD):');
+            if (newDate && /^\d{4}-\d{2}-\d{2}$/.test(newDate)) {
+                taskAction(taskId, 'reschedule', { date: newDate });
+            }
+        }
+
+        function renderTaskCard(task, sectionType) {
+            const priorityClass = `p${task.priority || 4}`;
+            const dueDate = task.due_at ? formatDate(parseISO(task.due_at)) : '';
+            const taskId = task.id;
+
+            const actionButtons = IS_LIVE ? `
+                <div class="task-actions">
+                    <button class="task-btn done-btn" onclick="handleDone(${taskId}, event)" title="Mark done">&#10003;</button>
+                    <button class="task-btn start-btn" onclick="handleStart(${taskId}, event)" title="Start working">&#9654;</button>
+                    <button class="task-btn reschedule-btn" onclick="handleReschedule(${taskId}, event)" title="Reschedule">&#8635;</button>
+                    <button class="task-btn cancel-btn" onclick="handleCancel(${taskId}, event)" title="Cancel">&times;</button>
+                </div>
+            ` : '';
+
+            return `
+                <div class="task-card ${sectionType}">
+                    <div class="task-priority-dot ${priorityClass}"></div>
+                    <div class="task-content">
+                        <div class="task-title">${task.title || ''}</div>
+                        <div class="task-meta">
+                            ${task.ticker ? `<span class="task-meta-item ticker">${task.ticker}</span>` : ''}
+                            ${task.category ? `<span class="task-meta-item">${task.category}</span>` : ''}
+                            ${task.estimated_minutes ? `<span class="task-meta-item">${task.estimated_minutes}min</span>` : ''}
+                        </div>
+                        ${dueDate ? `<div class="task-due-date">Due: ${dueDate}</div>` : ''}
+                    </div>
+                    ${actionButtons}
+                </div>
+            `;
+        }
+
+        // ========================================================================
+        // INITIALIZATION
+        // ========================================================================
+
+        function init() {
+            renderStats();
+            renderSidebar();
+            renderWeekView();
+
+            // Setup tab click handlers
+            document.querySelectorAll('.tab').forEach(tab => {
+                tab.addEventListener('click', () => switchView(tab.dataset.view));
+            });
+        }
+
+        // Initialize on page load
+        document.addEventListener('DOMContentLoaded', init);
+        if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', init);
+        } else {
+            init();
+        }
+    </script>
+</body>
+</html>
