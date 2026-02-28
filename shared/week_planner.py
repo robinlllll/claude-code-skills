@@ -22,9 +22,6 @@ import sys
 from datetime import date, datetime, timedelta
 from pathlib import Path
 
-# UTF-8 output for Windows
-sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8", errors="replace")
-
 SHARED_DIR = Path(__file__).parent
 HOME = Path.home()
 VAULT = HOME / "Documents" / "Obsidian Vault"
@@ -791,6 +788,8 @@ def _parse_earnings(s: str) -> list[dict]:
 
 
 def main():
+    import io as _io
+    sys.stdout = _io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8", errors="replace")
     parser = argparse.ArgumentParser(description="Week Planner")
     subparsers = parser.add_subparsers(dest="command")
 

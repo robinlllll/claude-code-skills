@@ -180,7 +180,9 @@ tags: [earnings-preview, {TICKER}, {sector}]
 | `/transcript-analyzer` | 财报后分析，与 preview 形成"预期-实际"闭环 |
 | `/consensus-dashboard` | 共识数据来源 |
 | `/thesis` | Kill criteria 和 conviction 来源 |
-| `/calendar` | 自动触发：财报日期前 2 天提醒生成 preview |
+| `/schedule import` | import 检测到 earnings 时建议运行 /earnings-preview |
+| `/schedule plan` | plan Step 2 引用已有 preview notes，Step 3 prep task 关联 preview wikilink |
+| `/schedule events` | 显示催化剂日历，标记已有 preview 的 earnings |
 | `/today` | 晨间简报引用即将发布的 preview |
 
 ## Deep Mode (--deep)

@@ -13,13 +13,9 @@ Usage:
     python gcal.py test              # Quick connectivity test
 """
 
-import io
 import json
-import sys
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from pathlib import Path
-
-sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8", errors="replace")
 
 DATA_DIR = Path(__file__).parent / "data"
 CREDENTIALS_FILE = DATA_DIR / "credentials.json"
@@ -242,6 +238,44 @@ def clear_schedule_events(
     return deleted
 
 
+def create_all_day_event(
+    date_str: str,
+    summary: str,
+    description: str = "",
+    calendar_id: str = "primary",
+    color_id: str | None = None,
+) -> dict:
+    """Create an all-day calendar event.
+
+    Args:
+        date_str: YYYY-MM-DD
+        summary: Event title
+        description: Event description
+        calendar_id: Calendar ID
+        color_id: Google Calendar color ID (1-11)
+
+    Returns:
+        Created event dict from API
+    """
+    service = _build_service()
+    # Google Calendar all-day events use {date:} format
+    # end_date = date + 1 day (exclusive end, Google convention)
+    end_date = (date.fromisoformat(date_str) + timedelta(days=1)).isoformat()
+
+    body = {
+        "summary": summary,
+        "start": {"date": date_str},
+        "end": {"date": end_date},
+    }
+    if description:
+        body["description"] = description
+    if color_id:
+        body["colorId"] = color_id
+    body["reminders"] = {"useDefault": False, "overrides": []}
+
+    return service.events().insert(calendarId=calendar_id, body=body).execute()
+
+
 def create_event(
     date_str: str,
     start_time: str,
@@ -430,7 +464,11 @@ def is_authenticated() -> bool:
 # ── CLI ──────────────────────────────────────────────────────────
 
 if __name__ == "__main__":
+    import io
+    import sys
     import argparse
+
+    sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8", errors="replace")
 
     parser = argparse.ArgumentParser(description="Google Calendar integration")
     sub = parser.add_subparsers(dest="command")
