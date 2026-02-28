@@ -1,0 +1,32 @@
+# Skills System Dependencies
+# Install: pip install -r requirements.txt
+# Python: 3.14+ (C:\Users\thisi\AppData\Local\Python\pythoncore-3.14-64\python.exe)
+
+# === Phase 1: Spreadsheet ===
+openpyxl>=3.1.0
+pandas>=2.0.0
+
+# === Phase 2: PDF ===
+reportlab>=4.0.0
+pdfplumber>=0.10.0
+pypdf>=4.0.0
+
+# === Phase 3: Playwright ===
+playwright>=1.40.0
+trafilatura>=1.6.0
+# After pip install, run ONCE: playwright install chromium
+
+# === Pre-existing (shared modules) ===
+# google-genai        # Gemini SDK (already installed)
+# openai              # GPT/Grok SDK (already installed)
+# pyyaml              # YAML parsing (already installed)
+# requests            # HTTP (already installed)
+# yfinance            # Stock prices (already installed)
+
+# === Optional ===
+# matplotlib          # Charts in Excel/PDF (install if needed)
+
+# === Windows Notes ===
+# - Use native Python, NOT MSYS2 Python, for playwright
+# - Chinese PDF: requires C:/Windows/Fonts/msyh.ttc (Microsoft YaHei)
+# - Chromium binary: ~150MB, downloaded by `playwright install chromium`
